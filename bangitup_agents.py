@@ -2,8 +2,10 @@
 import os, json, uuid
 
 def _int(v):
-    try: return int(v)
-    except Exception: return 0
+    try:
+        return int(v)
+    except Exception:
+        return 0
 
 class ShortWorkflowAgent:
     def make_short_task(self, video):
@@ -57,9 +59,12 @@ class ApprovalQueue:
     def __init__(self, path="approval_queue.json"):
         self.path = path
     def _load(self):
-        if not os.path.exists(self.path): return []
-        try: return json.load(open(self.path, "r", encoding="utf-8"))
-        except Exception: return []
+        if not os.path.exists(self.path):
+            return []
+        try:
+            return json.load(open(self.path, "r", encoding="utf-8"))
+        except Exception:
+            return []
     def _save(self, rows):
         json.dump(rows, open(self.path, "w", encoding="utf-8"), ensure_ascii=False, indent=2)
     def add(self, item):

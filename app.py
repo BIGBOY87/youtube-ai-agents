@@ -11,7 +11,7 @@ yt = YouTubeClient()
 queue = ApprovalQueue()
 
 register_upload_routes(app)
-register_scheduler_routes(app, yt, queue)
+register_scheduler_routes(app, yt, queue, ShortWorkflowAgent)
 
 @app.route("/")
 def root():
@@ -19,11 +19,7 @@ def root():
 
 @app.route("/health")
 def health():
-    return jsonify({
-        "status": "ok",
-        "service": "youtube-ai-agents-v16-scheduler",
-        "started_at": datetime.datetime.utcnow().isoformat() + "Z"
-    })
+    return jsonify({"status": "ok", "service": "youtube-ai-agents-v16.1-scheduler-fix", "started_at": datetime.datetime.utcnow().isoformat() + "Z"})
 
 @app.route("/api/videos")
 def api_videos():
@@ -37,15 +33,7 @@ def api_report():
     try:
         c = yt.channel()
         v = yt.recent_videos(12)
-        return jsonify({
-            "growth_report": GrowthAgent().report(c, v),
-            "initiatives": InitiativeEngine().decide(c, v),
-            "agent_status": {
-                "mode": "local-short-factory-render-upload-scheduler",
-                "upload": "active",
-                "scheduler": "active"
-            }
-        })
+        return jsonify({"growth_report": GrowthAgent().report(c, v), "initiatives": InitiativeEngine().decide(c, v), "agent_status": {"mode": "v16.1-scheduler-fix", "upload": "active", "scheduler": "active"}})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -53,12 +41,7 @@ def api_report():
 def api_shorts_tasks():
     try:
         plan = ShortWorkflowAgent().batch(yt.recent_videos(int(request.args.get("max", "10"))))
-        queue.add({
-            "created_at": datetime.datetime.utcnow().isoformat() + "Z",
-            "type": "v16_scheduled_short_tasks",
-            "status": "tasks_ready",
-            "plan": plan
-        })
+        queue.add({"created_at": datetime.datetime.utcnow().isoformat() + "Z", "type": "v16_1_short_tasks", "status": "tasks_ready", "plan": plan})
         return jsonify(plan)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -67,12 +50,7 @@ def api_shorts_tasks():
 def api_auto_run():
     try:
         plan = ShortWorkflowAgent().batch(yt.recent_videos(10))
-        item = {
-            "created_at": datetime.datetime.utcnow().isoformat() + "Z",
-            "type": "auto_run_scheduler",
-            "status": "tasks_ready",
-            "plan": plan
-        }
+        item = {"created_at": datetime.datetime.utcnow().isoformat() + "Z", "type": "auto_run_v16_1", "status": "tasks_ready", "plan": plan}
         queue.add(item)
         return jsonify({"status": "completed", "created_items": [item]})
     except Exception as e:
@@ -85,19 +63,15 @@ def api_queue():
 @app.route("/dashboard")
 def dashboard():
     return render_template_string("""
-    <h1>BANG IT UP MUSIC AI Agents v16</h1>
-    <p>Scheduler + Shorts task automation.</p>
+    <h1>BANG IT UP MUSIC AI Agents v16.1</h1>
+    <p>Scheduler fixed: internal direct run, no HTTP self-call.</p>
     <button onclick="go('/api/upload/status')">Upload Status</button>
-    <button onclick="go('/api/shorts/tasks?max=10')">Short Tasks</button>
     <button onclick="go('/api/scheduler/status')">Scheduler Status</button>
     <button onclick="go('/api/scheduler/log')">Scheduler Log</button>
+    <button onclick="go('/api/shorts/tasks?max=10')">Short Tasks</button>
     <pre id=o>Ready</pre>
     <script>
-    async function go(p){
-      o.textContent='Loading';
-      let r=await fetch(p);
-      o.textContent=JSON.stringify(await r.json(),null,2)
-    }
+    async function go(p){o.textContent='Loading';let r=await fetch(p);o.textContent=JSON.stringify(await r.json(),null,2)}
     </script>
     """)
 

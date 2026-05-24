@@ -15,7 +15,8 @@ def _credentials():
     raise RuntimeError("Missing OAuth token. Set YOUTUBE_TOKEN_JSON.")
 
 def upload_video(video_file, title, description, tags=None, category_id="10", privacy_status="private", publish_at=None):
-    if not os.path.exists(video_file): raise FileNotFoundError(video_file)
+    if not os.path.exists(video_file):
+        raise FileNotFoundError(video_file)
     body = {"snippet": {"title": str(title)[:100], "description": str(description)[:5000], "tags": tags or [], "categoryId": str(category_id)}, "status": {"privacyStatus": privacy_status, "selfDeclaredMadeForKids": False}}
     youtube = build("youtube", "v3", credentials=_credentials())
     media = MediaFileUpload(video_file, chunksize=-1, resumable=True, mimetype="video/mp4")

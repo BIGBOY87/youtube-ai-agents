@@ -2,7 +2,6 @@
 import os
 import json
 import datetime
-import requests
 from flask import jsonify, request
 
 SCHEDULER_LOG = "scheduler_log.json"
@@ -30,12 +29,12 @@ def _log(action, result):
     rows = rows[:100]
     _save_log(rows)
 
-def register_scheduler_routes(app, yt=None, queue=None):
-
+def register_scheduler_routes(app, yt=None, queue=None, short_agent_cls=None):
     @app.route("/api/scheduler/status")
     def scheduler_status():
         return jsonify({
             "scheduler_routes": "active",
+            "version": "v16.1-direct-internal-run",
             "mode": "external-cron-trigger",
             "scheduler_secret_configured": bool(os.getenv("SCHEDULER_SECRET", "").strip()),
             "auto_scheduler_enabled": os.getenv("AUTO_SCHEDULER_ENABLED", "false").lower() == "true",
@@ -56,34 +55,47 @@ def register_scheduler_routes(app, yt=None, queue=None):
 
         required_secret = os.getenv("SCHEDULER_SECRET", "").strip()
         provided_secret = request.args.get("secret", "").strip()
-
         if required_secret and provided_secret != required_secret:
             result = {"status": "blocked", "reason": "Invalid scheduler secret."}
             _log("scheduler_run", result)
             return jsonify(result), 403
 
-        base_url = os.getenv("PUBLIC_BASE_URL", "https://youtube-ai-agents.onrender.com").rstrip("/")
-        tasks = []
-
-        # 1. Create Shorts tasks from existing YouTube videos.
         try:
-            r = requests.get(f"{base_url}/api/shorts/tasks?max=10", timeout=60)
-            tasks.append({"endpoint": "/api/shorts/tasks", "status_code": r.status_code, "ok": r.ok})
-        except Exception as e:
-            tasks.append({"endpoint": "/api/shorts/tasks", "error": str(e)})
+            if yt is None or queue is None or short_agent_cls is None:
+                raise RuntimeError("Scheduler dependencies not registered.")
 
-        # 2. Run existing auto-run planner.
-        try:
-            r = requests.get(f"{base_url}/api/auto-run", timeout=60)
-            tasks.append({"endpoint": "/api/auto-run", "status_code": r.status_code, "ok": r.ok})
-        except Exception as e:
-            tasks.append({"endpoint": "/api/auto-run", "error": str(e)})
+            videos = yt.recent_videos(10)
+            plan = short_agent_cls().batch(videos)
 
-        result = {
-            "status": "scheduler_completed",
-            "created_at": datetime.datetime.utcnow().isoformat() + "Z",
-            "tasks": tasks,
-            "note": "Scheduler creates plans/tasks. It will not invent MP4 files from YouTube; ready MP4/direct URLs are still required for real uploads."
-        }
-        _log("scheduler_run", result)
-        return jsonify(result)
+            item = {
+                "created_at": datetime.datetime.utcnow().isoformat() + "Z",
+                "type": "scheduled_short_tasks",
+                "status": "tasks_ready",
+                "plan": plan,
+                "note": "Scheduler ran internally without HTTP self-call."
+            }
+            queue.add(item)
+
+            result = {
+                "status": "scheduler_completed",
+                "created_at": datetime.datetime.utcnow().isoformat() + "Z",
+                "tasks": [
+                    {
+                        "name": "create_short_tasks",
+                        "ok": True,
+                        "count": plan.get("count", 0)
+                    }
+                ],
+                "queue_item_id": item.get("id"),
+                "note": "Short tasks created. Real uploads still require direct MP4 URLs."
+            }
+            _log("scheduler_run", result)
+            return jsonify(result)
+        except Exception as e:
+            result = {
+                "status": "scheduler_failed",
+                "error": str(e),
+                "created_at": datetime.datetime.utcnow().isoformat() + "Z"
+            }
+            _log("scheduler_run", result)
+            return jsonify(result), 500
