@@ -5,12 +5,9 @@ from flask_upload_routes_patch import register_upload_routes
 from bangitup_agents import GrowthAgent, SEOAgent, ShortsAgent, DistributionAgent, CalendarAgent, InitiativeEngine, VideoCreatorAgent, ApprovalQueue, TrendHunter, ThumbnailAgent, SchedulerAgent, SafetyReviewer
 
 app = Flask(__name__)
-
 register_upload_routes(app)
-
 yt = YouTubeClient()
 queue = ApprovalQueue()
-
 def missing_vars():
     return [k for k in ["YOUTUBE_API_KEY", "YOUTUBE_CHANNEL_ID"] if not os.getenv(k)]
 
