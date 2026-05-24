@@ -213,6 +213,145 @@ def calendar_plan() -> List[Dict[str, str]]:
     return [{"day": d, "task": t, "status": "planned"} for d, t in zip(days, tasks)]
 
 
+
+def initiative_engine() -> Dict[str, Any]:
+    """Creates safe autonomous work items when the channel needs action.
+    It never performs uploads, comments, title edits, or public posts directly.
+    """
+    report = growth_report()
+    top_titles = [v["title"] for v in report.get("top_recent_videos", [])]
+    avg = report.get("recent_average_views", 0)
+    subs = report.get("channel", {}).get("subscribers", 0)
+    now = dt.datetime.utcnow().isoformat() + "Z"
+    initiatives: List[Dict[str, Any]] = []
+
+    # Always useful autonomous drafts
+    initiatives.append({
+        "id": "daily-growth-report",
+        "priority": "high",
+        "status": "auto_created_draft",
+        "agent": "Daily Growth Agent",
+        "trigger": "Daily channel check",
+        "action": "Create daily growth report and recommendation set",
+        "output": report.get("recommendations", []),
+        "requires_approval": False,
+    })
+
+    if avg < 1000:
+        initiatives.append({
+            "id": "shorts-boost-campaign",
+            "priority": "high",
+            "status": "auto_created_draft",
+            "agent": "Shorts Factory Agent",
+            "trigger": f"Recent average views are {avg}",
+            "action": "Create 7-day Shorts boost campaign from best tracks",
+            "output": [
+                "Post 2 Shorts/day for 7 days",
+                "Use the top 3 recent tracks as source material",
+                "Hook in first 1.5 seconds",
+                "CTA: Full track on BANG IT UP MUSIC",
+            ],
+            "requires_approval": False,
+        })
+
+    initiatives.append({
+        "id": "seo-refresh",
+        "priority": "medium",
+        "status": "needs_approval",
+        "agent": "SEO Agent",
+        "trigger": "Weekly metadata optimization window",
+        "action": "Draft new SEO titles/descriptions for low-performing videos",
+        "output": generate_seo(top_titles[0] if top_titles else "New BANG IT UP MUSIC Track", "Industrial Tech House"),
+        "requires_approval": True,
+        "reason": "Changing titles/descriptions is public-facing and should be approved.",
+    })
+
+    initiatives.append({
+        "id": "community-poll",
+        "priority": "medium",
+        "status": "needs_approval",
+        "agent": "Community Agent",
+        "trigger": "Audience engagement needed",
+        "action": "Draft a YouTube Community poll",
+        "output": {
+            "poll": "What should the next BANG IT UP MUSIC drop be?",
+            "options": ["Darker", "Faster", "More melodic", "Harder bass"],
+        },
+        "requires_approval": True,
+        "reason": "Public posting requires approval.",
+    })
+
+    initiatives.append({
+        "id": "collab-research",
+        "priority": "low",
+        "status": "auto_created_draft",
+        "agent": "Collaboration Agent",
+        "trigger": "Weekly organic reach expansion",
+        "action": "Prepare collaboration/outreach templates without sending them automatically",
+        "output": [
+            "Find 10 similar music channels/playlists manually or via future search integration",
+            "Send only personalized non-spam messages",
+            "Offer a remix, playlist swap, or honest feedback exchange",
+        ],
+        "requires_approval": False,
+    })
+
+    return {
+        "generated_at": now,
+        "mode": "controlled_autonomy",
+        "auto_mode_enabled": AUTO_MODE,
+        "summary": "The agent creates drafts and work items automatically when action is useful. Risky public actions remain locked behind approval.",
+        "initiatives": initiatives,
+        "hard_blocks": [
+            "fake views",
+            "fake subscribers",
+            "spam comments",
+            "mass DMs",
+            "artificial engagement",
+            "unapproved public uploads/posts",
+        ],
+    }
+
+
+def automation_schedule() -> List[Dict[str, Any]]:
+    return [
+        {"time": "09:00", "agent": "Daily Growth Agent", "task": "Read channel stats and create report", "mode": "auto_draft"},
+        {"time": "10:00", "agent": "Trend/SEO Agent", "task": "Create SEO and keyword opportunities", "mode": "auto_draft"},
+        {"time": "12:00", "agent": "Shorts Agent", "task": "Generate 2 Shorts concepts from top/recent tracks", "mode": "auto_draft"},
+        {"time": "18:00", "agent": "Community Agent", "task": "Draft community post or poll", "mode": "approval_required"},
+        {"time": "21:00", "agent": "Review Agent", "task": "Summarize actions waiting for approval", "mode": "auto_draft"},
+    ]
+
+
+def safe_action_policy() -> Dict[str, Any]:
+    return {
+        "auto_create_without_approval": [
+            "analytics reports",
+            "SEO drafts",
+            "Shorts ideas",
+            "distribution copy drafts",
+            "calendar tasks",
+            "approval queue items",
+            "collaboration templates",
+        ],
+        "approval_required_before_execution": [
+            "upload video",
+            "schedule public video",
+            "change video title/description/tags",
+            "reply to comments",
+            "post community update",
+            "post to external platforms",
+        ],
+        "blocked_forever": [
+            "fake views/subscribers",
+            "comment spam",
+            "mass DMs",
+            "engagement pods/bots",
+            "misleading metadata unrelated to the music",
+        ],
+    }
+
+
 @app.route("/")
 def root():
     return Response("""<!doctype html><html><head><meta http-equiv='refresh' content='0;url=/dashboard'></head><body>Redirecting to <a href='/dashboard'>dashboard</a></body></html>""", mimetype="text/html")
@@ -280,6 +419,24 @@ def api_approval():
     ])
 
 
+@app.route("/api/initiatives")
+def api_initiatives():
+    try:
+        return jsonify(initiative_engine())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/automation-schedule")
+def api_automation_schedule():
+    return jsonify(automation_schedule())
+
+
+@app.route("/api/safety-policy")
+def api_safety_policy():
+    return jsonify(safe_action_policy())
+
+
 @app.route("/dashboard")
 def dashboard():
     return Response(DASHBOARD_HTML, mimetype="text/html")
@@ -303,10 +460,10 @@ a{color:var(--cyan)}.wrap{max-width:1180px;margin:0 auto;padding:24px}.hero{disp
 <div class="wrap">
   <section class="hero">
     <div class="card">
-      <div class="brand">BANG IT UP MUSIC · AI Growth OS v4</div>
-      <div class="h1">YouTube AI Agents Dashboard</div>
-      <div class="sub">A safe, controlled-autonomy system for organic YouTube growth: analytics, SEO, Shorts, distribution drafts, content calendar, and approval queue. No fake views, no fake subscribers, no spam.</div>
-      <div class="pills"><span class="pill">SEO Agent</span><span class="pill">Shorts Agent</span><span class="pill">Growth Agent</span><span class="pill">Approval Mode</span><span class="pill">Render Live</span></div>
+      <div class="brand">BANG IT UP MUSIC · AI Growth OS v5</div>
+      <div class="h1">Autonomous YouTube AI Agents</div>
+      <div class="sub">A safe initiative engine for organic YouTube growth: it detects when action is needed, creates campaigns/drafts automatically, and keeps public actions behind approval. No fake views, no fake subscribers, no spam.</div>
+      <div class="pills"><span class="pill">SEO Agent</span><span class="pill">Shorts Agent</span><span class="pill">Growth Agent</span><span class="pill">Approval Mode</span><span class="pill">Render Live</span><span class="pill">Initiative Engine</span></div>
     </div>
     <div class="card status" id="statusBox"><div class="row"><span>Server</span><span class="ok">checking...</span></div></div>
   </section>
@@ -324,6 +481,9 @@ a{color:var(--cyan)}.wrap{max-width:1180px;margin:0 auto;padding:24px}.hero{disp
       <button onclick="loadDistribution()">Distribution Agent</button>
       <button onclick="loadCalendar()">Content Calendar</button>
       <button onclick="loadApproval()">Approval Queue</button>
+      <button onclick="loadInitiatives()">Initiative Engine</button>
+      <button onclick="loadSchedule()">Auto Schedule</button>
+      <button onclick="loadSafety()">Safety Policy</button>
       <button class="secondary" onclick="window.open('/health','_blank')">Health Check</button>
     </aside>
     <main class="card out" id="out"><h2>Ready.</h2><p class="sub">Choose an agent from the left. The system will read your YouTube API data and generate safe growth actions.</p></main>
@@ -347,6 +507,11 @@ async function loadShorts(){loading('Shorts Agent');try{const s=await api('/api/
 async function loadDistribution(){loading('Distribution Agent');try{const d=await api('/api/distribution?'+params());out.innerHTML=`<h2>Distribution Agent</h2><div class="list">${Object.entries(d).map(([k,v])=>`<div class="item"><strong>${esc(k)}</strong><p>${esc(v)}</p></div>`).join('')}</div>`}catch(e){error(e)}}
 async function loadCalendar(){loading('Content Calendar');try{const c=await api('/api/calendar');out.innerHTML=`<h2>7-Day Content Calendar</h2><div class="list">${c.map(x=>`<div class="item"><strong>${esc(x.day)}</strong><p>${esc(x.task)}</p><span class="tag">${esc(x.status)}</span></div>`).join('')}</div>`}catch(e){error(e)}}
 async function loadApproval(){loading('Approval Queue');try{const q=await api('/api/approval-queue?'+params());out.innerHTML=`<h2>Approval Queue</h2><p class="sub">This is where autonomous actions become safe. The agent drafts; you approve risky public actions.</p><div class="list">${q.map(x=>`<div class="item"><strong>${esc(x.type)}</strong> · <span class="risk-${esc(x.risk)}">${esc(x.risk)}</span><p>${esc(x.action)}</p><p class="sub">Status: ${esc(x.status)}</p><pre>${esc(x.preview)}</pre></div>`).join('')}</div>`}catch(e){error(e)}}
+
+async function loadInitiatives(){loading('Initiative Engine');try{const d=await api('/api/initiatives');out.innerHTML=`<h2>Initiative Engine</h2><p class="sub">${esc(d.summary)}</p><div class="cards"><div class="metric"><div class="num">${d.initiatives.length}</div><div class="label">Created initiatives</div></div><div class="metric"><div class="num">${d.auto_mode_enabled?'ON':'SAFE'}</div><div class="label">Autonomy mode</div></div></div><h3>Created Work Items</h3><div class="list">${d.initiatives.map(x=>`<div class="item"><strong>${esc(x.agent)}</strong> · <span class="tag">${esc(x.priority)}</span><p><b>Trigger:</b> ${esc(x.trigger)}</p><p><b>Action:</b> ${esc(x.action)}</p><p class="sub">Status: ${esc(x.status)} · Approval: ${x.requires_approval?'required':'not required'}</p><pre>${esc(typeof x.output==='string'?x.output:JSON.stringify(x.output,null,2))}</pre></div>`).join('')}</div><h3>Hard Blocks</h3>${d.hard_blocks.map(x=>`<span class="tag">${esc(x)}</span>`).join('')}` }catch(e){error(e)}}
+async function loadSchedule(){loading('Auto Schedule');try{const s=await api('/api/automation-schedule');out.innerHTML=`<h2>Daily Auto Schedule</h2><p class="sub">These are recurring jobs the agent can prepare automatically. Public actions stay in approval mode.</p><div class="list">${s.map(x=>`<div class="item"><strong>${esc(x.time)} · ${esc(x.agent)}</strong><p>${esc(x.task)}</p><span class="tag">${esc(x.mode)}</span></div>`).join('')}</div>`}catch(e){error(e)}}
+async function loadSafety(){loading('Safety Policy');try{const p=await api('/api/safety-policy');out.innerHTML=`<h2>Safety Policy</h2><div class="cards"><div class="metric"><h3>Auto Draft</h3>${p.auto_create_without_approval.map(x=>`<span class="tag">${esc(x)}</span>`).join('')}</div><div class="metric"><h3>Needs Approval</h3>${p.approval_required_before_execution.map(x=>`<span class="tag">${esc(x)}</span>`).join('')}</div><div class="metric"><h3>Blocked</h3>${p.blocked_forever.map(x=>`<span class="tag">${esc(x)}</span>`).join('')}</div></div>`}catch(e){error(e)}}
+
 init();
 </script>
 </body></html>
