@@ -1,0 +1,37 @@
+BANG IT UP MUSIC — ΑΠΛΕΣ ΟΔΗΓΙΕΣ
+
+ΣΚΟΠΟΣ
+Αυτός ο φάκελος είναι το νόμιμο AI agent σύστημα για το YouTube κανάλι σου.
+Δεν αγοράζει views, δεν κάνει fake subscribers, δεν κάνει spam.
+Βοηθά με SEO, analytics, τίτλους, descriptions, hashtags, Shorts ideas και promotion plan.
+
+ΤΙ ΘΑ ΚΑΝΕΙΣ ΕΣΥ
+Μόνο 1 ασφαλές πράγμα: θα βάλεις μέσα στον φάκελο το αρχείο OAuth της Google με όνομα:
+client_secret.json
+
+ΜΗΝ το στείλεις σε εμένα. ΜΗΝ το ανεβάσεις πουθενά. Μένει μόνο στον υπολογιστή σου.
+
+ΒΗΜΑΤΑ WINDOWS
+1. Αποσυμπίεσε το zip.
+2. Βάλε το client_secret.json μέσα στον ίδιο φάκελο με το main.py.
+3. Κάνε διπλό κλικ στο 1_INSTALL_WINDOWS.bat
+4. Κάνε διπλό κλικ στο 2_CONNECT_YOUTUBE_WINDOWS.bat
+5. Θα ανοίξει browser. Κάνε login στο Google account του YouTube καναλιού σου.
+6. Κάνε διπλό κλικ στο 3_RUN_AGENT_WINDOWS.bat
+7. Τα reports θα βγαίνουν στον φάκελο outputs.
+
+ΒΗΜΑΤΑ MAC / LINUX
+1. Αποσυμπίεσε το zip.
+2. Βάλε το client_secret.json μέσα στον ίδιο φάκελο με το main.py.
+3. Άνοιξε Terminal μέσα στον φάκελο.
+4. Τρέξε: bash 1_install_mac_linux.sh
+5. Τρέξε: bash 2_connect_youtube_mac_linux.sh
+6. Τρέξε: bash 3_run_agent_mac_linux.sh
+
+ΠΟΥ ΘΑ ΒΡΕΙΣ ΤΟ client_secret.json
+Google Cloud Console > APIs & Services > Credentials > Create Credentials > OAuth Client ID > Desktop App > Download JSON.
+Μετά μετονόμασέ το σε client_secret.json.
+
+ΑΣΦΑΛΕΙΑ
+Το token.json δημιουργείται αυτόματα μετά το login. Μην το μοιραστείς.
+Αν θέλεις να αποσυνδέσεις το app, σβήσε το token.json.

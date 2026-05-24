@@ -1,0 +1,33 @@
+BANG IT UP MUSIC — PRO AI AGENTS
+
+ΑΥΤΟ ΕΙΝΑΙ Η ΑΝΑΒΑΘΜΙΣΜΕΝΗ ΕΚΔΟΣΗ.
+
+ΤΙ ΚΑΝΕΙ:
+- Growth Agent: διαβάζει YouTube analytics και βγάζει προτάσεις
+- Trend Agent: δίνει keywords, hashtags και viral formats
+- Shorts Agent: φτιάχνει hooks/captions για Shorts
+- Thumbnail Agent: προτείνει αλλαγές για CTR
+- Distribution Agent: φτιάχνει posts για TikTok, Instagram, Facebook, X, Discord, Reddit-safe
+- Collaboration Agent: προτείνει συνεργασίες και μηνύματα
+- Local AI Agent: χρησιμοποιεί Ollama αν υπάρχει, αλλιώς δουλεύει με fallback
+- Dashboard: ανοίγει browser dashboard με campaign/report
+
+ΑΣΦΑΛΕΙΑ:
+Μη στείλεις σε κανέναν client_secret.json ή token.json.
+Τα κρατάς μόνο στον φάκελο σου.
+Το σύστημα ΔΕΝ κάνει fake views, fake subscribers, bots ή spam.
+
+ΠΩΣ ΤΟ ΤΡΕΧΕΙΣ ΣΕ WINDOWS:
+1) Αν έχεις ήδη client_secret.json και token.json από την προηγούμενη έκδοση, βάλε τα σε αυτόν τον φάκελο.
+2) Πάτα PRO_INSTALL_WINDOWS.bat μία φορά.
+3) Πάτα PRO_RUN_WINDOWS.bat.
+4) Στο menu:
+   - 1 για σύνδεση YouTube
+   - 2 για PRO campaign νέου τραγουδιού
+   - 3 για PRO analytics report
+   - 4 για dashboard
+
+ΠΡΟΑΙΡΕΤΙΚΟ OLLAMA:
+Αν εγκαταστήσεις Ollama και τρέξεις: ollama pull llama3.1:8b
+τότε ο Local AI Agent θα δίνει πιο έξυπνη στρατηγική.
+Αν δεν το κάνεις, το σύστημα συνεχίζει να δουλεύει κανονικά με κανόνες.

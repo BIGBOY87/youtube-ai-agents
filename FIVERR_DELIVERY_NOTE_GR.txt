@@ -1,0 +1,17 @@
+Ο developer πρέπει να ανεβάσει αυτόν τον φάκελο σε δημόσιο GitHub repo και μετά σε Heroku.
+
+Αρχεία έτοιμα για deployment:
+- app.py
+- worker.py
+- Procfile
+- requirements.txt
+- .env.template
+- .gitignore
+- README_HEROKU_DEPLOY_GR.md
+
+Μετά το deploy πρέπει να ενεργοποιήσει:
+heroku ps:scale web=1 worker=1
+
+Και να ελέγξει:
+heroku logs --tail
+/health endpoint
