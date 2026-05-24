@@ -1,0 +1,40 @@
+services:
+  - type: worker
+    name: youtube-ai-agents
+    env: python
+    plan: free
+    
+    # Start command
+    startCommand: python youtube_ai_agents_advanced.py
+    
+    # Environment variables from .env will be automatically loaded
+    envVars:
+      - key: YOUTUBE_API_KEY
+        scope: all
+      - key: YOUTUBE_CHANNEL_ID
+        scope: all
+      - key: TIKTOK_API_KEY
+        scope: all
+      - key: INSTAGRAM_TOKEN
+        scope: all
+      - key: TWITTER_API_KEY
+        scope: all
+      - key: REDDIT_CLIENT_ID
+        scope: all
+      - key: REDIS_CLIENT_SECRET
+        scope: all
+      - key: CLAUDE_API_KEY
+        scope: all
+      - key: OPENAI_API_KEY
+        scope: all
+      - key: COHERE_API_KEY
+        scope: all
+    
+    # Build command (installs dependencies)
+    buildCommand: pip install -r requirements_advanced.txt
+    
+    # Health check endpoint (optional for worker services)
+    healthCheck:
+      path: /health
+      initialDelaySecs: 10
+      intervalSecs: 300
