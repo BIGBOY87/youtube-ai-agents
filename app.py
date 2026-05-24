@@ -1,7 +1,7 @@
 import os
 from flask import Flask, jsonify, request, render_template_string
 from youtube_client import YouTubeClient
-from agents import ReportOrchestrator, SEOAgent, ShortsAgent, DistributionAgent, CalendarAgent, CollaborationAgent, TrendAgent
+from bangitup_agents import ReportOrchestrator, SEOAgent, ShortsAgent, DistributionAgent, CalendarAgent, CollaborationAgent, TrendAgent
 
 app = Flask(__name__)
 yt = YouTubeClient()
