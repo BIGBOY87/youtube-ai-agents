@@ -23,7 +23,6 @@ def _credentials():
 def upload_video(video_file, title, description, tags=None, category_id="10", privacy_status="private", publish_at=None):
     if not os.path.exists(video_file):
         raise FileNotFoundError(video_file)
-
     if privacy_status not in {"private", "unlisted", "public"}:
         privacy_status = "private"
 
@@ -39,15 +38,14 @@ def upload_video(video_file, title, description, tags=None, category_id="10", pr
             "selfDeclaredMadeForKids": False,
         },
     }
-
     if publish_at:
         body["status"]["publishAt"] = publish_at
         body["status"]["privacyStatus"] = "private"
 
     youtube = build("youtube", "v3", credentials=_credentials())
     media = MediaFileUpload(video_file, chunksize=-1, resumable=True, mimetype="video/mp4")
-
     request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
+
     response = None
     while response is None:
         _, response = request.next_chunk()

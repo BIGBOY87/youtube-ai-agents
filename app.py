@@ -4,7 +4,10 @@ import datetime
 from flask import Flask, jsonify, request, redirect, render_template_string
 
 from youtube_client import YouTubeClient
-from bangitup_agents import GrowthAgent, SEOAgent, ShortsAgent, DistributionAgent, CalendarAgent, InitiativeEngine, VideoCreatorAgent, ApprovalQueue
+from bangitup_agents import (
+    GrowthAgent, SEOAgent, ShortsAgent, DistributionAgent, CalendarAgent,
+    InitiativeEngine, VideoCreatorAgent, ApprovalQueue, RepurposeAgent
+)
 from upload_routes import register_upload_routes
 
 app = Flask(__name__)
@@ -18,7 +21,11 @@ def root():
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok", "service": "youtube-ai-agents-v12-upload-ready-mp4-only", "started_at": datetime.datetime.utcnow().isoformat() + "Z"})
+    return jsonify({
+        "status": "ok",
+        "service": "youtube-ai-agents-v13-repurpose-existing-videos",
+        "started_at": datetime.datetime.utcnow().isoformat() + "Z"
+    })
 
 @app.route("/api/channel")
 def api_channel():
@@ -34,6 +41,16 @@ def api_videos():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+@app.route("/api/video/<video_id>")
+def api_video(video_id):
+    try:
+        rows = yt.videos_by_ids([video_id])
+        if not rows:
+            return jsonify({"error": "video not found"}), 404
+        return jsonify(rows[0])
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 @app.route("/api/report")
 def api_report():
     try:
@@ -42,8 +59,45 @@ def api_report():
         return jsonify({
             "growth_report": GrowthAgent().report(c, v),
             "initiatives": InitiativeEngine().decide(c, v),
-            "agent_status": {"upload": "active", "mode": "ready-mp4-url-only"}
+            "agent_status": {
+                "upload": "active",
+                "repurpose_existing_videos": "active",
+                "mode": "ready-mp4-url-only"
+            }
         })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/repurpose-existing")
+def api_repurpose_existing():
+    try:
+        max_results = int(request.args.get("max", "10"))
+        videos = yt.recent_videos(max_results)
+        plan = RepurposeAgent().repurpose_batch(videos)
+        queue.add({
+            "created_at": datetime.datetime.utcnow().isoformat() + "Z",
+            "type": "repurpose_existing_videos",
+            "status": "plan_ready",
+            "plan": plan
+        })
+        return jsonify(plan)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@app.route("/api/repurpose-video/<video_id>")
+def api_repurpose_video(video_id):
+    try:
+        rows = yt.videos_by_ids([video_id])
+        if not rows:
+            return jsonify({"error": "video not found"}), 404
+        plan = RepurposeAgent().repurpose_video(rows[0])
+        queue.add({
+            "created_at": datetime.datetime.utcnow().isoformat() + "Z",
+            "type": "repurpose_single_video",
+            "status": "plan_ready",
+            "plan": plan
+        })
+        return jsonify(plan)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -73,18 +127,20 @@ def api_create_video_project():
 
 @app.route("/api/auto-run")
 def api_auto_run():
-    title = request.args.get("title", "Autonomous BANG IT UP MUSIC Upload")
-    genre = request.args.get("genre", "Tech House")
-    project = VideoCreatorAgent().create_project(title, genre)
-    item = {
-        "created_at": datetime.datetime.utcnow().isoformat() + "Z",
-        "type": "auto_run",
-        "status": "needs_mp4_url",
-        "project": project,
-        "note": "Render is configured to upload ready MP4 URLs only. Generate MP4 externally, then POST it to /api/upload/from-url."
-    }
-    queue.add(item)
-    return jsonify({"status": "completed", "created_items": [item]})
+    try:
+        videos = yt.recent_videos(10)
+        repurpose_plan = RepurposeAgent().repurpose_batch(videos)
+        item = {
+            "created_at": datetime.datetime.utcnow().isoformat() + "Z",
+            "type": "auto_run_repurpose",
+            "status": "plan_ready",
+            "plan": repurpose_plan,
+            "note": "Repurpose plans are ready. To produce actual Shorts videos, provide original MP4/direct URLs."
+        }
+        queue.add(item)
+        return jsonify({"status": "completed", "created_items": [item]})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/approval-queue")
 def api_queue():
@@ -93,9 +149,10 @@ def api_queue():
 @app.route("/dashboard")
 def dashboard():
     return render_template_string("""
-    <h1>BANG IT UP MUSIC AI Agents v12</h1>
-    <p>Upload-ready MP4 URL mode. Render does not render videos.</p>
+    <h1>BANG IT UP MUSIC AI Agents v13</h1>
+    <p>Repurpose existing YouTube videos into Shorts plans, captions, SEO refreshes and upload tasks.</p>
     <button onclick="go('/api/upload/status')">Upload Status</button>
+    <button onclick="go('/api/repurpose-existing?max=10')">Repurpose Existing Videos</button>
     <button onclick="go('/api/auto-run')">Auto Run</button>
     <button onclick="go('/api/report')">Report</button>
     <pre id="o">Ready</pre>
