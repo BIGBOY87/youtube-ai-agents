@@ -1,7 +1,5 @@
 
-import os
-import tempfile
-import requests
+import os, tempfile, requests
 from flask import jsonify, request
 from youtube_uploader import upload_video
 
@@ -20,7 +18,7 @@ def _safe_upload_allowed():
 
 def _download_mp4(url):
     if not url.startswith(("http://", "https://")):
-        raise ValueError("video_url must start with http:// or https://")
+        raise ValueError("URL must start with http:// or https://")
     fd, path = tempfile.mkstemp(suffix=".mp4")
     os.close(fd)
     size = 0
@@ -44,16 +42,16 @@ def register_upload_routes(app):
     def upload_status():
         return jsonify({
             "upload_routes": "active",
-            "mode": "upload-ready-mp4-only-with-shorts-workflow",
+            "mode": "v15-local-short-factory-render-upload",
             "youtube_upload_enabled": os.getenv("YOUTUBE_UPLOAD_ENABLED", "false").lower() == "true",
             "auto_public_mode": os.getenv("AUTO_PUBLIC_MODE", "false").lower() == "true",
             "auto_approve_uploads": os.getenv("AUTO_APPROVE_UPLOADS", "false").lower() == "true",
             "has_token_env": bool(os.getenv("YOUTUBE_TOKEN_JSON", "").strip()),
-            "has_local_token_file": os.path.exists("token.json"),
             "max_upload_source_mb": MAX_MB,
-            "message": "Uploads existing MP4 files from direct URLs. Shorts workflow creates plans from YouTube metadata and uploads ready Short MP4 URLs."
+            "message": "Render uploads ready MP4/Short URLs. Local Short Factory cuts your own MP4s on your PC."
         })
 
+    @app.route("/api/shorts/upload-from-url", methods=["POST"])
     @app.route("/api/upload/from-url", methods=["POST"])
     def upload_from_url():
         data = request.get_json(silent=True) or {}
@@ -62,18 +60,20 @@ def register_upload_routes(app):
             return jsonify({"status": "blocked", "reason": reason}), 400
         if data.get("own_content_confirmed") is not True:
             return jsonify({"status": "blocked", "reason": "own_content_confirmed must be true."}), 400
-        video_url = data.get("video_url", "").strip()
-        if not video_url:
-            return jsonify({"status": "blocked", "reason": "Missing video_url."}), 400
-
+        url = data.get("short_mp4_url") or data.get("video_url")
+        if not url:
+            return jsonify({"status": "blocked", "reason": "Missing short_mp4_url or video_url."}), 400
         path = None
         try:
-            path = _download_mp4(video_url)
+            path = _download_mp4(url)
+            title = data.get("title", "BANG IT UP MUSIC Short #Shorts")
+            if request.path.endswith("/shorts/upload-from-url") and "#shorts" not in title.lower():
+                title = title[:90] + " #Shorts"
             result = upload_video(
                 video_file=path,
-                title=data.get("title", "BANG IT UP MUSIC Upload"),
-                description=data.get("description", ""),
-                tags=data.get("tags", []),
+                title=title,
+                description=data.get("description", "BANG IT UP MUSIC. #BANGITUPMUSIC"),
+                tags=data.get("tags", ["BANGITUPMUSIC", "Shorts", "TechHouse", "EDM"]),
                 category_id=data.get("category_id", "10"),
                 privacy_status=data.get("privacy_status", os.getenv("DEFAULT_UPLOAD_PRIVACY", "private")),
                 publish_at=data.get("publish_at"),
@@ -83,7 +83,5 @@ def register_upload_routes(app):
             return jsonify({"status": "upload_failed", "error": str(e)}), 500
         finally:
             if path and os.path.exists(path):
-                try:
-                    os.remove(path)
-                except Exception:
-                    pass
+                try: os.remove(path)
+                except Exception: pass

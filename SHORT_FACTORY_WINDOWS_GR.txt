@@ -1,0 +1,43 @@
+
+BANG IT UP MUSIC - ΠΩΣ ΦΤΙΑΧΝΕΙΣ SHORT ΑΠΟ ΔΙΚΟ ΣΟΥ MP4
+
+1. Βάλε το αρχικό σου MP4 στον υπολογιστή.
+
+2. Άνοιξε PowerShell στον φάκελο αυτού του αρχείου.
+
+3. Τρέξε:
+
+pip install moviepy==1.0.3
+
+4. Παράδειγμα κοψίματος Short:
+
+python local_short_factory.py --input "C:\Users\Filippos\Videos\my_track.mp4" --title "MIDNIGHT RUN" --start 30 --duration 20
+
+Αυτό θα δημιουργήσει φάκελο:
+
+shorts_output
+
+Μέσα θα βρεις:
+- έτοιμο vertical Short MP4
+- payload JSON με τίτλο/description/tags
+
+5. Ανέβασε το Short MP4 σε Google Drive/Dropbox/Cloudinary και πάρε direct MP4 URL.
+
+6. Κάνε upload στο YouTube με PowerShell:
+
+$body = @{
+  short_mp4_url = "DIRECT_MP4_URL_HERE"
+  title = "MIDNIGHT RUN #Shorts"
+  description = "MIDNIGHT RUN by BANG IT UP MUSIC. #Shorts #BANGITUPMUSIC"
+  tags = @("BANGITUPMUSIC","Shorts","TechHouse","EDM")
+  privacy_status = "private"
+  own_content_confirmed = $true
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Uri "https://youtube-ai-agents.onrender.com/api/shorts/upload-from-url" `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $body
+
+Πρώτα πάντα PRIVATE.

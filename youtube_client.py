@@ -19,21 +19,12 @@ class YouTubeClient:
 
     def channel(self, channel_id=None):
         cid = channel_id or self.channel_id
-        data = self._get("/channels", {
-            "part": "snippet,statistics,brandingSettings,contentDetails",
-            "id": cid
-        })
+        data = self._get("/channels", {"part": "snippet,statistics,brandingSettings,contentDetails", "id": cid})
         return data.get("items", [{}])[0]
 
     def recent_videos(self, max_results=12, channel_id=None):
         cid = channel_id or self.channel_id
-        search = self._get("/search", {
-            "part": "snippet",
-            "channelId": cid,
-            "order": "date",
-            "maxResults": max_results,
-            "type": "video"
-        })
+        search = self._get("/search", {"part": "snippet", "channelId": cid, "order": "date", "maxResults": max_results, "type": "video"})
         ids = [i["id"]["videoId"] for i in search.get("items", []) if i.get("id", {}).get("videoId")]
         if not ids:
             return []
@@ -42,7 +33,4 @@ class YouTubeClient:
     def videos_by_ids(self, ids):
         if isinstance(ids, str):
             ids = [ids]
-        return self._get("/videos", {
-            "part": "snippet,statistics,contentDetails,status",
-            "id": ",".join(ids)
-        }).get("items", [])
+        return self._get("/videos", {"part": "snippet,statistics,contentDetails,status", "id": ",".join(ids)}).get("items", [])
