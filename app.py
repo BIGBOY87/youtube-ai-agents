@@ -1,335 +1,356 @@
 import os
 import json
-import datetime
+import math
+import datetime as dt
+from typing import Any, Dict, List, Optional
+
 import requests
-from flask import Flask, jsonify, request, render_template_string
+from flask import Flask, jsonify, request, Response
 
 app = Flask(__name__)
 
-YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "")
-YOUTUBE_CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID", "")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-COMPETITOR_CHANNEL_IDS = [x.strip() for x in os.getenv("COMPETITOR_CHANNEL_IDS", "").split(",") if x.strip()]
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY", "").strip()
+YOUTUBE_CHANNEL_ID = os.getenv("YOUTUBE_CHANNEL_ID", "").strip()
+AUTO_MODE = os.getenv("AUTO_MODE", "false").lower() == "true"
 
-YOUTUBE_BASE = "https://www.googleapis.com/youtube/v3"
+YT_BASE = "https://www.googleapis.com/youtube/v3"
 
-def missing_vars():
-    return [k for k in ["YOUTUBE_API_KEY", "YOUTUBE_CHANNEL_ID"] if not os.getenv(k)]
 
-def yt_get(endpoint, params):
+def _missing_vars() -> List[str]:
+    missing = []
+    if not YOUTUBE_API_KEY or YOUTUBE_API_KEY == "placeholder":
+        missing.append("YOUTUBE_API_KEY")
+    if not YOUTUBE_CHANNEL_ID or YOUTUBE_CHANNEL_ID == "placeholder":
+        missing.append("YOUTUBE_CHANNEL_ID")
+    return missing
+
+
+def yt_get(endpoint: str, params: Dict[str, Any]) -> Dict[str, Any]:
+    if _missing_vars():
+        raise RuntimeError("Missing required YouTube environment variables")
     params = dict(params)
     params["key"] = YOUTUBE_API_KEY
-    r = requests.get(f"{YOUTUBE_BASE}/{endpoint}", params=params, timeout=20)
-    if not r.ok:
-        return {"error": r.text, "status_code": r.status_code}
+    r = requests.get(f"{YT_BASE}/{endpoint}", params=params, timeout=20)
+    if r.status_code >= 400:
+        raise RuntimeError(f"YouTube API error {r.status_code}: {r.text[:500]}")
     return r.json()
 
-def channel(channel_id=None):
-    cid = channel_id or YOUTUBE_CHANNEL_ID
+
+def get_channel() -> Dict[str, Any]:
     data = yt_get("channels", {
         "part": "snippet,statistics,brandingSettings,contentDetails",
-        "id": cid
+        "id": YOUTUBE_CHANNEL_ID,
+        "maxResults": 1,
     })
     items = data.get("items", [])
     if not items:
-        return {"error": "Channel not found", "raw": data}
+        raise RuntimeError("Channel not found. Check YOUTUBE_CHANNEL_ID.")
     return items[0]
 
-def recent_videos(max_results=10, channel_id=None):
-    cid = channel_id or YOUTUBE_CHANNEL_ID
+
+def get_recent_videos(limit: int = 12) -> List[Dict[str, Any]]:
     search = yt_get("search", {
         "part": "snippet",
-        "channelId": cid,
+        "channelId": YOUTUBE_CHANNEL_ID,
         "order": "date",
         "type": "video",
-        "maxResults": max_results
+        "maxResults": min(limit, 25),
     })
-    ids = [i["id"]["videoId"] for i in search.get("items", []) if i.get("id", {}).get("videoId")]
+    ids = [x["id"]["videoId"] for x in search.get("items", []) if x.get("id", {}).get("videoId")]
     if not ids:
         return []
-    details = yt_get("videos", {
+    videos = yt_get("videos", {
         "part": "snippet,statistics,contentDetails",
-        "id": ",".join(ids)
+        "id": ",".join(ids),
+        "maxResults": len(ids),
     })
-    return details.get("items", [])
+    return videos.get("items", [])
 
-def safe_int(x):
+
+def n_int(x: Any) -> int:
     try:
         return int(x)
     except Exception:
         return 0
 
-def video_score(v):
-    s = v.get("statistics", {})
-    views = safe_int(s.get("viewCount"))
-    likes = safe_int(s.get("likeCount"))
-    comments = safe_int(s.get("commentCount"))
-    return views + likes * 20 + comments * 50
 
-def top_videos(videos, limit=5):
-    return sorted(videos, key=video_score, reverse=True)[:limit]
-
-def fallback_seo(title, genre, mood="high energy"):
-    title = title or "New BANG IT UP MUSIC Track"
-    genre = genre or "EDM"
-    keywords = [genre, "tech house", "melodic techno", "dark club music", "festival vibe", "BANG IT UP MUSIC"]
+def format_video_card(v: Dict[str, Any]) -> Dict[str, Any]:
+    sn = v.get("snippet", {})
+    st = v.get("statistics", {})
+    thumbs = sn.get("thumbnails", {})
+    thumb = (thumbs.get("medium") or thumbs.get("high") or thumbs.get("default") or {}).get("url", "")
     return {
-        "agent": "SEO Agent",
-        "titles": [
-            f"{title} | {genre} Anthem 2026",
-            f"{title} - Dark {genre} / Club Mix",
-            f"{title} | BANG IT UP MUSIC Official Release",
-            f"{genre} Energy: {title}",
-            f"{title} | Underground {genre} Music"
-        ],
-        "description": (
-            f"{title} by BANG IT UP MUSIC.\n\n"
-            f"Original {genre} track with {mood} energy, heavy bass and night-drive atmosphere.\n\n"
-            "Subscribe for weekly Tech House, Melodic Techno, EDM and underground festival vibes.\n"
-            "Turn it up. Feel it. Bang it up."
-        ),
-        "hashtags": ["#BANGITUPMUSIC", "#EDM", "#TechHouse", "#MelodicTechno", "#DarkTechno", "#FestivalMusic", "#ClubMusic", "#ElectronicMusic", "#NewMusic", "#Music2026"],
-        "tags": keywords + ["new music", "underground music", "bass", "night drive", "cyberpunk music"],
-        "pinned_comment": f"Where should this track be played: club, car, gym, or festival? 🔥"
+        "id": v.get("id"),
+        "title": sn.get("title", "Untitled"),
+        "publishedAt": sn.get("publishedAt", ""),
+        "thumbnail": thumb,
+        "views": n_int(st.get("viewCount")),
+        "likes": n_int(st.get("likeCount")),
+        "comments": n_int(st.get("commentCount")),
+        "description": sn.get("description", "")[:300],
+        "url": f"https://www.youtube.com/watch?v={v.get('id')}",
     }
 
-def fallback_shorts(title, genre):
-    title = title or "New Track"
-    genre = genre or "EDM"
-    hooks = [
-        f"Wait for the bass drop in {title}.",
-        f"This {genre} drop hits harder at night.",
-        "Use headphones for this one.",
-        "POV: the club lights turn red.",
-        "Would you play this at 2AM?"
+
+def generate_seo(title: str, genre: str = "EDM") -> Dict[str, Any]:
+    base = title.strip() or "New BANG IT UP MUSIC Track"
+    genre = genre.strip() or "EDM"
+    power_words = ["Official Visualizer", "Bass Boosted", "Club Mix", "Dark Energy", "Underground Mix"]
+    titles = [
+        f"{base} | {genre} {power_words[0]}",
+        f"{base} - {genre} Track for Night Drives",
+        f"{base} | Dark {genre} / Industrial Club Energy",
+        f"BANG IT UP MUSIC - {base} ({genre} Mix)",
+        f"{base} | Viral {genre} Beat 2026",
     ]
+    hashtags = ["#BANGITUPMUSIC", f"#{genre.replace(' ', '')}", "#NewMusic", "#ElectronicMusic", "#MusicProducer", "#ClubMusic", "#BassMusic", "#YouTubeMusic", "#Shorts", "#ViralMusic", "#EDM", "#TechHouse"]
+    tags = ["BANG IT UP MUSIC", base, genre, "new music", "electronic music", "club music", "industrial tech house", "bass music", "music 2026", "youtube music", "viral song", "edm mix", "producer", "underground music", "night drive music"]
+    description = f"""{base} by BANG IT UP MUSIC.
+
+A high-energy {genre} release built for clubs, night drives, gym sessions and underground playlists.
+
+Listen, comment your favorite part, and subscribe for more new drops from BANG IT UP MUSIC.
+
+Follow the channel:
+https://www.youtube.com/@BANGITUPMUSIC
+
+Hashtags:
+{' '.join(hashtags[:8])}
+"""
     return {
-        "agent": "Shorts Agent",
-        "shorts": [
-            {"hook": h, "caption": f"{title} | {genre} energy. #Shorts #BANGITUPMUSIC", "length": "12-20 sec"}
-            for h in hooks
-        ]
+        "titles": titles,
+        "description": description,
+        "hashtags": hashtags,
+        "tags": tags,
+        "pinned_comment": f"Which part of {base} hits hardest? Drop a timestamp and subscribe for the next release.",
+        "thumbnail_text": [base.upper()[:24], "DARK CLUB ENERGY", "NEW DROP"],
     }
 
-def fallback_distribution(title, genre):
+
+def generate_shorts(title: str, genre: str = "EDM") -> Dict[str, Any]:
+    title = title.strip() or "New BANG IT UP MUSIC Track"
+    hooks = [
+        f"Wait for the drop in {title}...",
+        "This bassline changes the whole mood.",
+        "POV: midnight drive, full volume.",
+        "Industrial club energy in 15 seconds.",
+        "This part deserves headphones.",
+        "When the beat finally opens up.",
+        "Dark room. Heavy bass. No talking.",
+        "Save this for your night playlist.",
+    ]
+    captions = [
+        f"{title} is out now. Full track on BANG IT UP MUSIC.",
+        f"New {genre} energy. Link in channel.",
+        "Would you play this in the club?",
+        "Drop a 🔥 if this hits.",
+    ]
+    plan = [
+        {"short": 1, "angle": "drop teaser", "length": "12-18s", "cta": "Full version on YouTube"},
+        {"short": 2, "angle": "bassline loop", "length": "8-12s", "cta": "Save for later"},
+        {"short": 3, "angle": "visualizer moment", "length": "15-25s", "cta": "Comment your timestamp"},
+        {"short": 4, "angle": "night drive vibe", "length": "10-20s", "cta": "Subscribe for more"},
+    ]
+    return {"hooks": hooks, "captions": captions, "shorts_plan": plan}
+
+
+def distribution_pack(title: str, genre: str = "EDM") -> Dict[str, Any]:
+    title = title.strip() or "New BANG IT UP MUSIC Track"
     return {
-        "agent": "Distribution Agent",
-        "tiktok": f"{title} is built for late-night {genre} energy. Would you play this? #edm #techhouse",
-        "instagram": f"New BANG IT UP MUSIC release: {title}. Dark energy, heavy bass, underground vibe.",
-        "facebook": f"New track from BANG IT UP MUSIC: {title}. Listen and tell us where this belongs: club, car, gym, or festival.",
-        "x": f"{title} // {genre} // BANG IT UP MUSIC. Turn it up.",
-        "reddit_safe": f"I produce {genre}/electronic music under BANG IT UP MUSIC. I’d appreciate feedback on this track: {title}."
+        "youtube_community": f"New drop from BANG IT UP MUSIC: {title}. Should the next one go darker, faster, or more melodic?",
+        "instagram": f"{title} is out now. Dark {genre} energy from BANG IT UP MUSIC. #BANGITUPMUSIC #NewMusic #{genre.replace(' ', '')}",
+        "tiktok": f"POV: the beat kicks in at midnight. {title} by BANG IT UP MUSIC. #{genre.replace(' ', '')} #newmusic #bass",
+        "x": f"New BANG IT UP MUSIC release: {title}. Dark {genre} energy. Listen on YouTube.",
+        "reddit_safe": f"I released a new {genre} track called {title}. Looking for honest feedback on the mix, drop, and visualizer. No spam — feedback welcome.",
+        "discord": f"New track live: {title}. If you like dark {genre}/club energy, check it out and tell me which timestamp hits hardest.",
     }
 
-def calendar():
-    return {
-        "agent": "Content Planner Agent",
-        "weekly_plan": [
-            {"day": "Monday", "task": "Publish 1 Short from strongest drop", "goal": "Retention test"},
-            {"day": "Tuesday", "task": "Community post: poll about next genre", "goal": "Engagement"},
-            {"day": "Wednesday", "task": "Upload full track or visualizer", "goal": "Watch time"},
-            {"day": "Thursday", "task": "Post behind-the-scenes / DAW screenshot", "goal": "Artist identity"},
-            {"day": "Friday", "task": "Release 2 Shorts during evening hours", "goal": "Discovery"},
-            {"day": "Saturday", "task": "Comment on 10 relevant music channels, no spam", "goal": "Organic discovery"},
-            {"day": "Sunday", "task": "Review views, likes, comments and plan next track", "goal": "Optimization"}
-        ]
-    }
 
-def build_report():
-    ch = channel()
-    vids = recent_videos(12)
-    tops = top_videos(vids, 5)
-    stats = ch.get("statistics", {}) if isinstance(ch, dict) else {}
+def growth_report() -> Dict[str, Any]:
+    channel = get_channel()
+    videos = get_recent_videos(10)
+    cards = [format_video_card(v) for v in videos]
+    total_recent_views = sum(v["views"] for v in cards)
+    avg_views = math.floor(total_recent_views / max(len(cards), 1))
+    top = sorted(cards, key=lambda x: x["views"], reverse=True)[:3]
+    recommendations = []
+    if avg_views < 1000:
+        recommendations.append("Increase Shorts output: 2-3 Shorts per full track for 14 days.")
+    recommendations.append("Use the best-performing title patterns from the top 3 videos for the next upload.")
+    recommendations.append("Add a pinned comment asking for timestamp feedback to increase comments.")
+    recommendations.append("Create one Community poll per release: darker / faster / melodic / club version.")
+    recommendations.append("Repurpose every visualizer into 4 Shorts: drop, intro vibe, bassline, final hook.")
     return {
-        "agent": "Growth Report Agent",
-        "generated_at": datetime.datetime.utcnow().isoformat() + "Z",
+        "generated_at": dt.datetime.utcnow().isoformat() + "Z",
         "channel": {
-            "title": ch.get("snippet", {}).get("title"),
-            "subscribers": stats.get("subscriberCount"),
-            "views": stats.get("viewCount"),
-            "video_count": stats.get("videoCount")
+            "title": channel.get("snippet", {}).get("title"),
+            "subscribers": n_int(channel.get("statistics", {}).get("subscriberCount")),
+            "views": n_int(channel.get("statistics", {}).get("viewCount")),
+            "videos": n_int(channel.get("statistics", {}).get("videoCount")),
         },
-        "top_recent_videos": [
-            {
-                "title": v.get("snippet", {}).get("title"),
-                "views": v.get("statistics", {}).get("viewCount", "0"),
-                "likes": v.get("statistics", {}).get("likeCount", "0"),
-                "comments": v.get("statistics", {}).get("commentCount", "0"),
-                "recommendation": "Make 2 Shorts from this style and reuse the best keywords."
-            } for v in tops
-        ],
-        "recommendations": [
-            "Keep titles under 65 characters with genre + mood + brand.",
-            "Create Shorts from the first 8 seconds and from the strongest drop.",
-            "Use consistent tags: Tech House, Melodic Techno, Dark Techno, EDM, Club Music.",
-            "Add a pinned comment question to increase comment velocity.",
-            "Publish Shorts within 24 hours after each full track."
-        ]
+        "recent_average_views": avg_views,
+        "top_recent_videos": top,
+        "recommendations": recommendations,
+        "safe_autonomy": {
+            "auto_allowed": ["analytics reports", "SEO drafts", "Shorts ideas", "content calendar", "distribution drafts"],
+            "approval_required": ["uploads", "title/description changes", "comment replies", "public posts"],
+            "blocked": ["fake views", "fake subscribers", "spam comments", "mass DMs", "artificial engagement"],
+        },
     }
 
-def competitors():
-    out = []
-    for cid in COMPETITOR_CHANNEL_IDS:
-        try:
-            out.append({"channel": channel(cid), "recent_videos": recent_videos(5, cid)})
-        except Exception as e:
-            out.append({"channel_id": cid, "error": str(e)})
-    return out
+
+def calendar_plan() -> List[Dict[str, str]]:
+    days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+    tasks = [
+        "Publish 1 Short from latest track",
+        "Community poll: choose next vibe",
+        "Upload/prepare full track or visualizer",
+        "Comment engagement: reply to real comments",
+        "Release teaser Short with hook",
+        "Playlist/outreach research without spam",
+        "Weekly analytics review and next plan",
+    ]
+    return [{"day": d, "task": t, "status": "planned"} for d, t in zip(days, tasks)]
+
 
 @app.route("/")
-def index():
-    return render_template_string("""
-<!doctype html><html><head><title>BANG IT UP MUSIC AI Agents v3</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<style>
-body{font-family:Arial;background:#0b0b10;color:#f4f4f5;margin:0;padding:32px}
-.card{background:#171720;border:1px solid #2c2c36;border-radius:16px;padding:20px;margin:16px 0}
-a{color:#a78bfa}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
-</style></head><body>
-<h1>BANG IT UP MUSIC AI Agents v3</h1>
-<p>Service online. Use the dashboard below.</p>
-<div class="grid">
-<div class="card"><h3>Dashboard</h3><a href="/dashboard">/dashboard</a></div>
-<div class="card"><h3>Health</h3><a href="/health">/health</a></div>
-<div class="card"><h3>Channel</h3><a href="/api/channel">/api/channel</a></div>
-<div class="card"><h3>Videos</h3><a href="/api/videos">/api/videos</a></div>
-<div class="card"><h3>Report</h3><a href="/api/report">/api/report</a></div>
-</div></body></html>
-""")
+def root():
+    return Response("""<!doctype html><html><head><meta http-equiv='refresh' content='0;url=/dashboard'></head><body>Redirecting to <a href='/dashboard'>dashboard</a></body></html>""", mimetype="text/html")
+
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok", "service": "youtube-ai-agents-v3", "missing_required_vars": missing_vars(), "started_at": datetime.datetime.utcnow().isoformat() + "Z"})
+    return jsonify({"status": "ok", "missing_required_vars": _missing_vars(), "auto_mode": AUTO_MODE})
+
 
 @app.route("/api/channel")
 def api_channel():
     try:
-        return jsonify(channel())
+        return jsonify(get_channel())
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/api/videos")
 def api_videos():
     try:
-        max_results = int(request.args.get("max", "10"))
-        return jsonify(recent_videos(max_results=max_results))
+        limit = int(request.args.get("limit", 12))
+        return jsonify(get_recent_videos(limit))
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 @app.route("/api/report")
 def api_report():
     try:
-        return jsonify(build_report())
+        return jsonify(growth_report())
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
 @app.route("/api/seo")
 def api_seo():
-    return jsonify(fallback_seo(request.args.get("title", "New BANG IT UP MUSIC Track"), request.args.get("genre", "EDM"), request.args.get("mood", "high energy")))
+    return jsonify(generate_seo(request.args.get("title", ""), request.args.get("genre", "EDM")))
+
 
 @app.route("/api/shorts")
 def api_shorts():
-    return jsonify(fallback_shorts(request.args.get("title", "New Track"), request.args.get("genre", "EDM")))
+    return jsonify(generate_shorts(request.args.get("title", ""), request.args.get("genre", "EDM")))
+
 
 @app.route("/api/distribution")
 def api_distribution():
-    return jsonify(fallback_distribution(request.args.get("title", "New Track"), request.args.get("genre", "EDM")))
+    return jsonify(distribution_pack(request.args.get("title", ""), request.args.get("genre", "EDM")))
+
 
 @app.route("/api/calendar")
 def api_calendar():
-    return jsonify(calendar())
+    return jsonify(calendar_plan())
 
-@app.route("/api/competitors")
-def api_competitors():
-    return jsonify(competitors())
+
+@app.route("/api/approval-queue")
+def api_approval():
+    title = request.args.get("title", "New BANG IT UP MUSIC Track")
+    genre = request.args.get("genre", "EDM")
+    return jsonify([
+        {"type": "SEO Update", "status": "needs_approval", "action": "Apply suggested title/description", "risk": "medium", "preview": generate_seo(title, genre)["titles"][0]},
+        {"type": "Shorts Campaign", "status": "safe_auto_draft", "action": "Create 4 Shorts ideas", "risk": "low", "preview": generate_shorts(title, genre)["hooks"][0]},
+        {"type": "Community Post", "status": "needs_approval", "action": "Post poll to YouTube Community", "risk": "medium", "preview": distribution_pack(title, genre)["youtube_community"]},
+        {"type": "Upload", "status": "locked", "action": "Upload/schedule video", "risk": "high", "preview": "Requires OAuth upload scope and explicit approval."},
+    ])
+
 
 @app.route("/dashboard")
 def dashboard():
-    return render_template_string("""
-<!doctype html><html><head><title>BANG IT UP MUSIC AI Agents Dashboard</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
+    return Response(DASHBOARD_HTML, mimetype="text/html")
+
+
+DASHBOARD_HTML = r"""
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>BANG IT UP MUSIC AI Agents v4</title>
 <style>
-body{font-family:Arial;background:#08080d;color:#f5f5f5;margin:0;padding:24px}
-h1{font-size:28px}.card{background:#171720;border:1px solid #30303a;border-radius:16px;padding:16px;margin:14px 0}
-button{background:#7c3aed;color:#fff;border:0;border-radius:10px;padding:10px 14px;margin:4px;cursor:pointer;font-weight:bold}
-input{background:#0e0e12;color:#fff;border:1px solid #333;border-radius:8px;padding:10px;margin:4px;min-width:240px}
-pre{white-space:pre-wrap;background:#0f0f14;border-radius:12px;padding:14px}
-.video{display:flex;gap:14px;border:1px solid #333;border-radius:12px;padding:10px;margin:10px 0;background:#101018}
-.video img{width:180px;border-radius:8px}.muted{color:#b5b5c3}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:12px}
-</style></head><body>
-<h1>BANG IT UP MUSIC AI Agents Dashboard</h1>
-<div class="card">
-<button onclick="load('/api/channel')">Channel</button>
-<button onclick="load('/api/videos')">Recent Videos</button>
-<button onclick="load('/api/report')">Full Growth Report</button>
-<button onclick="load('/api/calendar')">Calendar</button>
-<button onclick="load('/api/competitors')">Competitors</button>
+:root{--bg:#080812;--panel:#111326;--panel2:#171a33;--text:#f4f6ff;--muted:#9aa3c7;--line:#2a2f55;--pink:#ff2bd6;--cyan:#28e8ff;--green:#42f58d;--orange:#ffb84d;--red:#ff5f73}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,ui-sans-serif,system-ui,Segoe UI,Arial;background:radial-gradient(circle at 20% 0%,#24104d 0,#080812 35%),radial-gradient(circle at 90% 15%,#0b4b58 0,#080812 28%);color:var(--text)}
+a{color:var(--cyan)}.wrap{max-width:1180px;margin:0 auto;padding:24px}.hero{display:grid;grid-template-columns:1.25fr .75fr;gap:18px;margin-bottom:18px}.card{background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.035));border:1px solid var(--line);border-radius:22px;padding:18px;box-shadow:0 22px 70px rgba(0,0,0,.32);backdrop-filter: blur(10px)}
+.brand{font-size:13px;color:var(--cyan);letter-spacing:.16em;text-transform:uppercase}.h1{font-size:42px;line-height:1.02;margin:8px 0 10px;font-weight:900}.sub{color:var(--muted);max-width:720px;line-height:1.55}.pills{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}.pill{border:1px solid var(--line);background:#0c0f20;border-radius:99px;padding:8px 10px;color:#cbd2ff;font-size:13px}.status{display:grid;gap:10px}.status .row{display:flex;justify-content:space-between;border-bottom:1px solid #24294c;padding:8px 0;color:var(--muted)}.ok{color:var(--green);font-weight:800}.grid{display:grid;grid-template-columns:280px 1fr;gap:18px}.side{position:sticky;top:16px;height:fit-content}.input{width:100%;padding:12px 14px;border:1px solid var(--line);background:#0b0e1e;color:var(--text);border-radius:14px;margin:7px 0 12px}button{width:100%;border:0;border-radius:14px;padding:12px 14px;margin:6px 0;background:linear-gradient(135deg,var(--pink),#6b5cff);color:white;font-weight:800;cursor:pointer}button.secondary{background:#151936;border:1px solid var(--line);color:#dfe5ff}button:hover{filter:brightness(1.08)}.out{min-height:520px}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.metric{background:var(--panel2);border:1px solid var(--line);border-radius:18px;padding:16px}.metric .num{font-size:28px;font-weight:900}.metric .label{color:var(--muted);font-size:13px}.video{overflow:hidden}.video img{width:100%;border-radius:14px;border:1px solid var(--line)}.video h3{font-size:15px;line-height:1.25}.video p{color:var(--muted);font-size:13px}.list{display:grid;gap:10px}.item{background:#101429;border:1px solid var(--line);border-radius:16px;padding:14px}.item strong{color:#fff}.tag{display:inline-block;background:#0c2440;border:1px solid #195473;color:#c9f7ff;border-radius:999px;padding:5px 8px;margin:4px;font-size:12px}.risk-low{color:var(--green)}.risk-medium{color:var(--orange)}.risk-high{color:var(--red)}pre{white-space:pre-wrap;background:#080b18;border:1px solid var(--line);border-radius:16px;padding:14px;overflow:auto}.copy{width:auto;padding:8px 10px;font-size:12px;margin-left:8px;background:#20264a}.footer{color:var(--muted);font-size:12px;margin-top:20px;text-align:center}@media(max-width:850px){.hero,.grid{grid-template-columns:1fr}.h1{font-size:32px}.side{position:relative;top:0}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <section class="hero">
+    <div class="card">
+      <div class="brand">BANG IT UP MUSIC · AI Growth OS v4</div>
+      <div class="h1">YouTube AI Agents Dashboard</div>
+      <div class="sub">A safe, controlled-autonomy system for organic YouTube growth: analytics, SEO, Shorts, distribution drafts, content calendar, and approval queue. No fake views, no fake subscribers, no spam.</div>
+      <div class="pills"><span class="pill">SEO Agent</span><span class="pill">Shorts Agent</span><span class="pill">Growth Agent</span><span class="pill">Approval Mode</span><span class="pill">Render Live</span></div>
+    </div>
+    <div class="card status" id="statusBox"><div class="row"><span>Server</span><span class="ok">checking...</span></div></div>
+  </section>
+  <section class="grid">
+    <aside class="card side">
+      <label>Track title</label>
+      <input class="input" id="title" value="New BANG IT UP MUSIC Track" />
+      <label>Genre</label>
+      <input class="input" id="genre" value="Industrial Tech House" />
+      <button onclick="loadChannel()">Channel</button>
+      <button onclick="loadVideos()">Recent Videos</button>
+      <button onclick="loadReport()">Full Growth Report</button>
+      <button onclick="loadSEO()">SEO Agent</button>
+      <button onclick="loadShorts()">Shorts Agent</button>
+      <button onclick="loadDistribution()">Distribution Agent</button>
+      <button onclick="loadCalendar()">Content Calendar</button>
+      <button onclick="loadApproval()">Approval Queue</button>
+      <button class="secondary" onclick="window.open('/health','_blank')">Health Check</button>
+    </aside>
+    <main class="card out" id="out"><h2>Ready.</h2><p class="sub">Choose an agent from the left. The system will read your YouTube API data and generate safe growth actions.</p></main>
+  </section>
+  <div class="footer">Controlled autonomy: drafts and reports can be automated. Uploads, public posts, title changes and comment replies require approval.</div>
 </div>
-<div class="card">
-<h3>Generate Campaign Assets</h3>
-<input id="title" value="New BANG IT UP MUSIC Track" placeholder="Track title">
-<input id="genre" value="EDM" placeholder="Genre">
-<input id="mood" value="high energy" placeholder="Mood">
-<button onclick="load('/api/seo?title='+encodeURIComponent(title.value)+'&genre='+encodeURIComponent(genre.value)+'&mood='+encodeURIComponent(mood.value))">SEO</button>
-<button onclick="load('/api/shorts?title='+encodeURIComponent(title.value)+'&genre='+encodeURIComponent(genre.value))">Shorts</button>
-<button onclick="load('/api/distribution?title='+encodeURIComponent(title.value)+'&genre='+encodeURIComponent(genre.value))">Distribution</button>
-</div>
-<div id="out" class="card">Click a button.</div>
 <script>
-const out = document.getElementById("out");
-function esc(x){return String(x ?? "").replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
-function renderChannel(data){
-  const s=data.statistics||{}, sn=data.snippet||{};
-  out.innerHTML = `<h2>${esc(sn.title)}</h2>
-  <p class="muted">${esc(sn.description||"")}</p>
-  <div class="grid">
-    <div class="card"><b>Subscribers</b><br>${esc(s.subscriberCount||"hidden")}</div>
-    <div class="card"><b>Total Views</b><br>${esc(s.viewCount||"0")}</div>
-    <div class="card"><b>Videos</b><br>${esc(s.videoCount||"0")}</div>
-  </div>`;
-}
-function renderVideos(data){
-  let html="<h2>Recent Videos</h2>";
-  data.forEach(v=>{
-    const sn=v.snippet||{}, st=v.statistics||{}, th=sn.thumbnails?.medium?.url || sn.thumbnails?.default?.url || "";
-    html += `<div class="video">${th?`<img src="${esc(th)}">`:""}<div>
-      <h3>${esc(sn.title)}</h3>
-      <p class="muted">${esc((sn.description||"").slice(0,220))}</p>
-      <p>Views: ${esc(st.viewCount||"0")} | Likes: ${esc(st.likeCount||"0")} | Comments: ${esc(st.commentCount||"0")}</p>
-      <p><b>Agent Suggestion:</b> Make 2 Shorts from this title/style and reuse the top genre keywords.</p>
-    </div></div>`;
-  });
-  out.innerHTML=html;
-}
-function renderReport(data){
-  let html=`<h2>Growth Report</h2><div class="grid">
-    <div class="card"><b>Subscribers</b><br>${esc(data.channel?.subscribers)}</div>
-    <div class="card"><b>Views</b><br>${esc(data.channel?.views)}</div>
-    <div class="card"><b>Videos</b><br>${esc(data.channel?.video_count)}</div>
-  </div><h3>Top Recent Videos</h3>`;
-  (data.top_recent_videos||[]).forEach(v=>{html+=`<div class="card"><b>${esc(v.title)}</b><br>Views: ${esc(v.views)} | Likes: ${esc(v.likes)} | Comments: ${esc(v.comments)}<br>${esc(v.recommendation)}</div>`});
-  html += "<h3>Recommendations</h3><ul>"+(data.recommendations||[]).map(r=>`<li>${esc(r)}</li>`).join("")+"</ul>";
-  out.innerHTML=html;
-}
-function renderCalendar(data){
-  out.innerHTML="<h2>Weekly Content Calendar</h2>"+(data.weekly_plan||[]).map(x=>`<div class="card"><b>${esc(x.day)}</b><br>${esc(x.task)}<br><span class="muted">${esc(x.goal)}</span></div>`).join("");
-}
-function renderGeneric(data){out.innerHTML="<pre>"+esc(JSON.stringify(data,null,2))+"</pre>";}
-async function load(path){
-  out.innerHTML="Loading...";
-  try{
-    const r=await fetch(path);
-    const data=await r.json();
-    if(path.includes("/api/channel")) return renderChannel(data);
-    if(path.includes("/api/videos")) return renderVideos(data);
-    if(path.includes("/api/report")) return renderReport(data);
-    if(path.includes("/api/calendar")) return renderCalendar(data);
-    return renderGeneric(data);
-  }catch(e){out.innerHTML="<b>Error:</b> "+esc(e.toString());}
-}
-</script></body></html>
-""")
+const out=document.getElementById('out');
+const esc=s=>String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
+const fmt=n=>Number(n||0).toLocaleString();
+async function api(path){const r=await fetch(path); const j=await r.json(); if(!r.ok) throw new Error(j.error||r.statusText); return j;}
+function params(){return `title=${encodeURIComponent(document.getElementById('title').value)}&genre=${encodeURIComponent(document.getElementById('genre').value)}`}
+async function init(){try{const h=await api('/health');document.getElementById('statusBox').innerHTML=`<div class="row"><span>Server</span><span class="ok">OK</span></div><div class="row"><span>Missing vars</span><span>${esc(h.missing_required_vars.join(', ')||'none')}</span></div><div class="row"><span>Auto mode</span><span>${h.auto_mode?'ON':'OFF'}</span></div>`}catch(e){document.getElementById('statusBox').innerHTML=`<div class="row"><span>Server</span><span class="risk-high">ERROR</span></div><pre>${esc(e.message)}</pre>`}}
+function loading(name){out.innerHTML=`<h2>${name}</h2><p class="sub">Loading...</p>`}
+function error(e){out.innerHTML=`<h2>Error</h2><pre>${esc(e.message||e)}</pre>`}
+async function loadChannel(){loading('Channel');try{const c=await api('/api/channel');const s=c.statistics||{}, sn=c.snippet||{}, th=((sn.thumbnails||{}).medium||(sn.thumbnails||{}).default||{}).url||'';out.innerHTML=`<h2>${esc(sn.title)}</h2><div class="cards"><div class="metric"><div class="num">${fmt(s.subscriberCount)}</div><div class="label">Subscribers</div></div><div class="metric"><div class="num">${fmt(s.viewCount)}</div><div class="label">Total views</div></div><div class="metric"><div class="num">${fmt(s.videoCount)}</div><div class="label">Videos</div></div></div><br>${th?`<img src="${esc(th)}" style="border-radius:18px;border:1px solid var(--line)">`:''}<p class="sub">${esc(sn.description||'')}</p>`}catch(e){error(e)}}
+async function loadVideos(){loading('Recent Videos');try{const data=await api('/api/videos?limit=12');out.innerHTML=`<h2>Recent Videos</h2><div class="cards">${data.map(v=>{const sn=v.snippet||{}, st=v.statistics||{}, th=((sn.thumbnails||{}).medium||(sn.thumbnails||{}).default||{}).url||'';return `<div class="metric video"><img src="${esc(th)}"><h3>${esc(sn.title)}</h3><p>Views: ${fmt(st.viewCount)} · Likes: ${fmt(st.likeCount)} · Comments: ${fmt(st.commentCount)}</p><a target="_blank" href="https://youtube.com/watch?v=${esc(v.id)}">Open video</a></div>`}).join('')}</div>`}catch(e){error(e)}}
+async function loadReport(){loading('Growth Report');try{const r=await api('/api/report');out.innerHTML=`<h2>Full Growth Report</h2><div class="cards"><div class="metric"><div class="num">${fmt(r.channel.subscribers)}</div><div class="label">Subscribers</div></div><div class="metric"><div class="num">${fmt(r.channel.views)}</div><div class="label">Channel views</div></div><div class="metric"><div class="num">${fmt(r.recent_average_views)}</div><div class="label">Avg recent views</div></div></div><h3>Recommendations</h3><div class="list">${r.recommendations.map(x=>`<div class="item">${esc(x)}</div>`).join('')}</div><h3>Top Recent Videos</h3><div class="cards">${r.top_recent_videos.map(v=>`<div class="metric video"><img src="${esc(v.thumbnail)}"><h3>${esc(v.title)}</h3><p>${fmt(v.views)} views</p></div>`).join('')}</div><h3>Safety Rules</h3><pre>${esc(JSON.stringify(r.safe_autonomy,null,2))}</pre>`}catch(e){error(e)}}
+async function loadSEO(){loading('SEO Agent');try{const s=await api('/api/seo?'+params());out.innerHTML=`<h2>SEO Agent</h2><h3>Titles</h3><div class="list">${s.titles.map(x=>`<div class="item"><strong>${esc(x)}</strong></div>`).join('')}</div><h3>Description <button class="copy" onclick="navigator.clipboard.writeText(document.getElementById('desc').innerText)">Copy</button></h3><pre id="desc">${esc(s.description)}</pre><h3>Hashtags</h3>${s.hashtags.map(x=>`<span class="tag">${esc(x)}</span>`).join('')}<h3>Tags</h3><pre>${esc(s.tags.join(', '))}</pre><h3>Pinned Comment</h3><div class="item">${esc(s.pinned_comment)}</div>`}catch(e){error(e)}}
+async function loadShorts(){loading('Shorts Agent');try{const s=await api('/api/shorts?'+params());out.innerHTML=`<h2>Shorts Agent</h2><h3>Hooks</h3><div class="list">${s.hooks.map(x=>`<div class="item">${esc(x)}</div>`).join('')}</div><h3>Shorts Plan</h3><div class="cards">${s.shorts_plan.map(x=>`<div class="metric"><strong>Short #${x.short}</strong><p>${esc(x.angle)}</p><p class="sub">${esc(x.length)} · ${esc(x.cta)}</p></div>`).join('')}</div><h3>Captions</h3><pre>${esc(s.captions.join('\n'))}</pre>`}catch(e){error(e)}}
+async function loadDistribution(){loading('Distribution Agent');try{const d=await api('/api/distribution?'+params());out.innerHTML=`<h2>Distribution Agent</h2><div class="list">${Object.entries(d).map(([k,v])=>`<div class="item"><strong>${esc(k)}</strong><p>${esc(v)}</p></div>`).join('')}</div>`}catch(e){error(e)}}
+async function loadCalendar(){loading('Content Calendar');try{const c=await api('/api/calendar');out.innerHTML=`<h2>7-Day Content Calendar</h2><div class="list">${c.map(x=>`<div class="item"><strong>${esc(x.day)}</strong><p>${esc(x.task)}</p><span class="tag">${esc(x.status)}</span></div>`).join('')}</div>`}catch(e){error(e)}}
+async function loadApproval(){loading('Approval Queue');try{const q=await api('/api/approval-queue?'+params());out.innerHTML=`<h2>Approval Queue</h2><p class="sub">This is where autonomous actions become safe. The agent drafts; you approve risky public actions.</p><div class="list">${q.map(x=>`<div class="item"><strong>${esc(x.type)}</strong> · <span class="risk-${esc(x.risk)}">${esc(x.risk)}</span><p>${esc(x.action)}</p><p class="sub">Status: ${esc(x.status)}</p><pre>${esc(x.preview)}</pre></div>`).join('')}</div>`}catch(e){error(e)}}
+init();
+</script>
+</body></html>
+"""
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", "10000")))
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 5000)))

@@ -1,23 +1,13 @@
-# BANG IT UP MUSIC AI Agents v3 FULL
+# BANG IT UP MUSIC AI Agents v4
 
-Render-ready YouTube AI dashboard.
+Render-ready Flask app for a YouTube growth dashboard.
 
 Required environment variables:
-- YOUTUBE_API_KEY
-- YOUTUBE_CHANNEL_ID
+- `YOUTUBE_API_KEY`
+- `YOUTUBE_CHANNEL_ID`
 
-Optional:
-- COMPETITOR_CHANNEL_IDS comma-separated channel IDs
-- OPENAI_API_KEY / GEMINI_API_KEY for future LLM enhancement
+Deploy on Render with:
+- Build command: `pip install -r requirements.txt`
+- Start command: `gunicorn app:app`
 
-Routes:
-- /dashboard
-- /health
-- /api/channel
-- /api/videos
-- /api/report
-- /api/seo
-- /api/shorts
-- /api/distribution
-- /api/calendar
-- /api/competitors
+Important: this system does not create fake views/subscribers or spam. It generates safe growth recommendations, SEO assets, content plans, approval queues, and YouTube Data API reports.
