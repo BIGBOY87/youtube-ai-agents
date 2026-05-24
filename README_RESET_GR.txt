@@ -1,0 +1,1 @@
+BANG IT UP MUSIC AI Agents - CLEAN RESET PACKAGE\n\nΑνέβασε ΟΛΑ τα αρχεία αυτού του ZIP στο GitHub και πάτα Replace όπου ζητήσει.\n\nΜετά: Render → Manual Deploy → Deploy latest commit.\n\nΔοκίμασε /health, /dashboard, /api/upload/status.\n\nΜΗΝ ανεβάσεις ποτέ client_secret.json, token.json, .env ή API keys.\n
