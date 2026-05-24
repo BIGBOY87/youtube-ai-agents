@@ -2,6 +2,7 @@
 import os, tempfile, requests
 from flask import jsonify, request
 from youtube_uploader import upload_video
+from source_registry import add_source_record
 
 MAX_MB = int(os.getenv("MAX_UPLOAD_SOURCE_MB", "250"))
 
@@ -23,7 +24,7 @@ def _download_mp4(url):
     with requests.get(url, stream=True, timeout=90) as r:
         r.raise_for_status()
         if "text/html" in r.headers.get("content-type", "").lower():
-            raise ValueError("URL returned HTML, not MP4.")
+            raise ValueError("URL returned HTML, not MP4. Use a direct downloadable MP4 URL.")
         with open(path, "wb") as f:
             for chunk in r.iter_content(chunk_size=1024*1024):
                 if not chunk:
@@ -39,12 +40,57 @@ def register_upload_routes(app):
     def upload_status():
         return jsonify({
             "upload_routes": "active",
-            "mode": "v16.1-scheduler-fix",
-            "youtube_upload_enabled": os.getenv("YOUTUBE_UPLOAD_ENABLED","false").lower()=="true",
-            "auto_public_mode": os.getenv("AUTO_PUBLIC_MODE","false").lower()=="true",
-            "auto_approve_uploads": os.getenv("AUTO_APPROVE_UPLOADS","false").lower()=="true",
-            "has_token_env": bool(os.getenv("YOUTUBE_TOKEN_JSON","").strip())
+            "mode": "v18-source-registry-growth-loop",
+            "youtube_upload_enabled": os.getenv("YOUTUBE_UPLOAD_ENABLED", "false").lower() == "true",
+            "auto_public_mode": os.getenv("AUTO_PUBLIC_MODE", "false").lower() == "true",
+            "auto_approve_uploads": os.getenv("AUTO_APPROVE_UPLOADS", "false").lower() == "true",
+            "has_token_env": bool(os.getenv("YOUTUBE_TOKEN_JSON", "").strip()),
+            "max_upload_source_mb": MAX_MB
         })
+
+    @app.route("/api/source/upload-private", methods=["POST"])
+    def source_upload_private():
+        data = request.get_json(silent=True) or {}
+        allowed, reason = _safe_upload_allowed()
+        if not allowed:
+            return jsonify({"status": "blocked", "reason": reason}), 400
+
+        if data.get("own_content_confirmed") is not True:
+            return jsonify({"status": "blocked", "reason": "own_content_confirmed must be true."}), 400
+
+        source_url = data.get("source_mp4_url") or data.get("video_url")
+        if not source_url:
+            return jsonify({"status": "blocked", "reason": "Missing source_mp4_url."}), 400
+
+        path = None
+        try:
+            path = _download_mp4(source_url)
+            result = upload_video(
+                video_file=path,
+                title=data.get("title", "BANG IT UP MUSIC Private Source"),
+                description=data.get("description", "Private source upload for BANG IT UP MUSIC AI Agent."),
+                tags=data.get("tags", ["BANGITUPMUSIC", "TechHouse", "EDM"]),
+                category_id=data.get("category_id", "10"),
+                privacy_status="private",
+                publish_at=None,
+            )
+            record = add_source_record(
+                source_mp4_url=source_url,
+                youtube_video_id=result["video_id"],
+                youtube_url=result["youtube_url"],
+                title=data.get("title", "BANG IT UP MUSIC Private Source"),
+                privacy_status="private",
+                extra={"upload_result": result}
+            )
+            return jsonify({"status": "source_uploaded_and_registered", "upload": result, "registry_record": record})
+        except Exception as e:
+            return jsonify({"status": "upload_failed", "error": str(e)}), 500
+        finally:
+            if path and os.path.exists(path):
+                try:
+                    os.remove(path)
+                except Exception:
+                    pass
 
     @app.route("/api/shorts/upload-from-url", methods=["POST"])
     @app.route("/api/upload/from-url", methods=["POST"])
@@ -61,7 +107,15 @@ def register_upload_routes(app):
         path = None
         try:
             path = _download_mp4(url)
-            result = upload_video(path, data.get("title","BANG IT UP MUSIC Short #Shorts"), data.get("description","BANG IT UP MUSIC"), data.get("tags",["BANGITUPMUSIC","Shorts"]), data.get("category_id","10"), data.get("privacy_status", os.getenv("DEFAULT_UPLOAD_PRIVACY","private")), data.get("publish_at"))
+            result = upload_video(
+                path,
+                data.get("title", "BANG IT UP MUSIC Short #Shorts"),
+                data.get("description", "BANG IT UP MUSIC"),
+                data.get("tags", ["BANGITUPMUSIC", "Shorts"]),
+                data.get("category_id", "10"),
+                data.get("privacy_status", os.getenv("DEFAULT_UPLOAD_PRIVACY", "private")),
+                data.get("publish_at")
+            )
             return jsonify(result)
         except Exception as e:
             return jsonify({"status": "upload_failed", "error": str(e)}), 500

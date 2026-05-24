@@ -2,16 +2,15 @@
 import datetime
 from flask import Flask, jsonify, request, redirect, render_template_string
 from youtube_client import YouTubeClient
-from bangitup_agents import GrowthAgent, InitiativeEngine, ApprovalQueue, ShortWorkflowAgent
 from upload_routes import register_upload_routes
-from scheduler_routes import register_scheduler_routes
+from bangitup_agents import ApprovalQueue
+from source_registry import list_sources, find_by_video_id, append_growth_action
+from growth_loop import analyze_video_performance
 
 app = Flask(__name__)
 yt = YouTubeClient()
 queue = ApprovalQueue()
-
 register_upload_routes(app)
-register_scheduler_routes(app, yt, queue, ShortWorkflowAgent)
 
 @app.route("/")
 def root():
@@ -19,42 +18,51 @@ def root():
 
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok", "service": "youtube-ai-agents-v16.1-scheduler-fix", "started_at": datetime.datetime.utcnow().isoformat() + "Z"})
+    return jsonify({"status": "ok", "service": "youtube-ai-agents-v18-source-registry-growth-loop", "started_at": datetime.datetime.utcnow().isoformat() + "Z"})
 
-@app.route("/api/videos")
-def api_videos():
-    try:
-        return jsonify(yt.recent_videos(int(request.args.get("max", "12"))))
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+@app.route("/api/source/registry")
+def api_source_registry():
+    return jsonify(list_sources())
 
-@app.route("/api/report")
-def api_report():
-    try:
-        c = yt.channel()
-        v = yt.recent_videos(12)
-        return jsonify({"growth_report": GrowthAgent().report(c, v), "initiatives": InitiativeEngine().decide(c, v), "agent_status": {"mode": "v16.1-scheduler-fix", "upload": "active", "scheduler": "active"}})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+@app.route("/api/source/<video_id>")
+def api_source(video_id):
+    rec = find_by_video_id(video_id)
+    if not rec:
+        return jsonify({"error": "source record not found"}), 404
+    return jsonify(rec)
 
-@app.route("/api/shorts/tasks")
-def api_shorts_tasks():
-    try:
-        plan = ShortWorkflowAgent().batch(yt.recent_videos(int(request.args.get("max", "10"))))
-        queue.add({"created_at": datetime.datetime.utcnow().isoformat() + "Z", "type": "v16_1_short_tasks", "status": "tasks_ready", "plan": plan})
-        return jsonify(plan)
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+@app.route("/api/source/analyze/<video_id>")
+def api_source_analyze(video_id):
+    rec = find_by_video_id(video_id)
+    if not rec:
+        return jsonify({"error": "source record not found"}), 404
+    rows = yt.videos_by_ids([video_id])
+    if not rows:
+        return jsonify({"error": "youtube video not found"}), 404
+    analysis = analyze_video_performance(rows[0])
+    append_growth_action(video_id, {"type": "performance_analysis", "analysis": analysis})
+    queue.add({"created_at": datetime.datetime.utcnow().isoformat() + "Z", "type": "growth_actions", "video_id": video_id, "analysis": analysis})
+    return jsonify({"source": rec, "analysis": analysis})
 
-@app.route("/api/auto-run")
-def api_auto_run():
-    try:
-        plan = ShortWorkflowAgent().batch(yt.recent_videos(10))
-        item = {"created_at": datetime.datetime.utcnow().isoformat() + "Z", "type": "auto_run_v16_1", "status": "tasks_ready", "plan": plan}
-        queue.add(item)
-        return jsonify({"status": "completed", "created_items": [item]})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+@app.route("/api/source/growth-loop")
+def api_source_growth_loop():
+    records = list_sources()
+    results = []
+    for rec in records:
+        video_id = rec.get("youtube_video_id")
+        try:
+            rows = yt.videos_by_ids([video_id])
+            if not rows:
+                results.append({"video_id": video_id, "status": "not_found"})
+                continue
+            analysis = analyze_video_performance(rows[0])
+            append_growth_action(video_id, {"type": "scheduled_performance_analysis", "analysis": analysis})
+            results.append({"video_id": video_id, "status": "analyzed", "analysis": analysis})
+        except Exception as e:
+            results.append({"video_id": video_id, "status": "error", "error": str(e)})
+    item = {"created_at": datetime.datetime.utcnow().isoformat() + "Z", "type": "source_growth_loop", "status": "completed", "results": results}
+    queue.add(item)
+    return jsonify(item)
 
 @app.route("/api/approval-queue")
 def api_queue():
@@ -63,12 +71,12 @@ def api_queue():
 @app.route("/dashboard")
 def dashboard():
     return render_template_string("""
-    <h1>BANG IT UP MUSIC AI Agents v16.1</h1>
-    <p>Scheduler fixed: internal direct run, no HTTP self-call.</p>
+    <h1>BANG IT UP MUSIC AI Agents v18</h1>
+    <p>Source Registry + Growth Loop.</p>
     <button onclick="go('/api/upload/status')">Upload Status</button>
-    <button onclick="go('/api/scheduler/status')">Scheduler Status</button>
-    <button onclick="go('/api/scheduler/log')">Scheduler Log</button>
-    <button onclick="go('/api/shorts/tasks?max=10')">Short Tasks</button>
+    <button onclick="go('/api/source/registry')">Source Registry</button>
+    <button onclick="go('/api/source/growth-loop')">Run Growth Loop</button>
+    <button onclick="go('/api/approval-queue')">Queue</button>
     <pre id=o>Ready</pre>
     <script>
     async function go(p){o.textContent='Loading';let r=await fetch(p);o.textContent=JSON.stringify(await r.json(),null,2)}

@@ -1,6 +1,5 @@
 
-import os
-import requests
+import os, requests
 
 class YouTubeClient:
     def __init__(self):
@@ -27,4 +26,9 @@ class YouTubeClient:
         ids = [i["id"]["videoId"] for i in search.get("items", []) if i.get("id", {}).get("videoId")]
         if not ids:
             return []
+        return self.videos_by_ids(ids)
+
+    def videos_by_ids(self, ids):
+        if isinstance(ids, str):
+            ids = [ids]
         return self._get("/videos", {"part": "snippet,statistics,contentDetails,status", "id": ",".join(ids)}).get("items", [])
