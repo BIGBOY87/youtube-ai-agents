@@ -1,21 +1,15 @@
-import time, logging
-from youtube_client import YouTubeClient
-from agents import ReportOrchestrator
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
-
-def run_once():
-    yt = YouTubeClient()
-    channel = yt.channel()
-    videos = yt.recent_videos(max_results=12)
-    report = ReportOrchestrator().full_report(channel, videos, {})
-    logging.info("BANG IT UP MUSIC AI Agents v2 running")
-    logging.info("Channel: %s", channel.get("snippet", {}).get("title"))
-    logging.info("Recent videos loaded: %s", len(videos))
-    logging.info("Recommendations: %s", report["growth"]["recommendations"])
-
-if __name__ == "__main__":
+import time, logging, requests, os
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+BASE=os.getenv('PUBLIC_BASE_URL','')
+def main():
+    logging.info('Starting autonomous worker. It creates drafts only; no public posting without approval.')
     while True:
-        try: run_once()
-        except Exception as e: logging.exception("Worker error: %s", e)
-        time.sleep(21600)
+        try:
+            if BASE:
+                r=requests.get(BASE.rstrip('/')+'/api/auto-run',timeout=60)
+                logging.info('auto-run status=%s body=%s', r.status_code, r.text[:200])
+            else:
+                logging.info('PUBLIC_BASE_URL not set; worker idle. Set it to your Render URL to enable scheduled draft creation.')
+        except Exception as e: logging.exception(e)
+        time.sleep(6*60*60)
+if __name__=='__main__': main()
