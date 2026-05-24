@@ -1,0 +1,32 @@
+ΠΩΣ ΕΝΕΡΓΟΠΟΙΕΙΣ ΤΟΝ SCHEDULER
+
+1. Ανέβασε το αρχείο:
+scheduler_routes.py
+
+2. Στο app.py πρόσθεσε κοντά στα imports:
+from scheduler_routes import register_scheduler_routes
+
+3. Κάτω από:
+register_upload_routes(app)
+
+βάλε:
+register_scheduler_routes(app, yt, queue)
+
+4. Commit changes
+5. Render → Deploy latest commit
+
+Μετά βάλε Render Environment:
+
+AUTO_SCHEDULER_ENABLED=true
+PUBLIC_BASE_URL=https://youtube-ai-agents.onrender.com
+SCHEDULER_SECRET=βαλε-ενα-δικο-σου-μυστικο
+
+Δοκιμές:
+https://youtube-ai-agents.onrender.com/api/scheduler/status
+https://youtube-ai-agents.onrender.com/api/scheduler/run?secret=ΤΟ_SECRET_ΣΟΥ
+https://youtube-ai-agents.onrender.com/api/scheduler/log
+
+Για να τρέχει κάθε μέρα:
+Χρησιμοποίησε cron-job.org και βάλε να χτυπάει το:
+https://youtube-ai-agents.onrender.com/api/scheduler/run?secret=ΤΟ_SECRET_ΣΟΥ
+μία φορά την ημέρα.
