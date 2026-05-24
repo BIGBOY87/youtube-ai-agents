@@ -6,7 +6,7 @@ from flask import Flask, jsonify, request, redirect, render_template_string
 from youtube_client import YouTubeClient
 from bangitup_agents import (
     GrowthAgent, SEOAgent, ShortsAgent, DistributionAgent, CalendarAgent,
-    InitiativeEngine, VideoCreatorAgent, ApprovalQueue, RepurposeAgent
+    InitiativeEngine, ApprovalQueue, ShortWorkflowAgent
 )
 from upload_routes import register_upload_routes
 
@@ -23,7 +23,7 @@ def root():
 def health():
     return jsonify({
         "status": "ok",
-        "service": "youtube-ai-agents-v13-repurpose-existing-videos",
+        "service": "youtube-ai-agents-v14-auto-shorts-workflow",
         "started_at": datetime.datetime.utcnow().isoformat() + "Z"
     })
 
@@ -61,45 +61,94 @@ def api_report():
             "initiatives": InitiativeEngine().decide(c, v),
             "agent_status": {
                 "upload": "active",
-                "repurpose_existing_videos": "active",
-                "mode": "ready-mp4-url-only"
+                "auto_shorts_workflow": "active",
+                "mode": "shorts-from-original-mp4-url"
             }
         })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/repurpose-existing")
-def api_repurpose_existing():
+@app.route("/api/shorts/tasks")
+def api_shorts_tasks():
     try:
         max_results = int(request.args.get("max", "10"))
         videos = yt.recent_videos(max_results)
-        plan = RepurposeAgent().repurpose_batch(videos)
+        plan = ShortWorkflowAgent().batch(videos)
         queue.add({
             "created_at": datetime.datetime.utcnow().isoformat() + "Z",
-            "type": "repurpose_existing_videos",
-            "status": "plan_ready",
+            "type": "auto_shorts_tasks",
+            "status": "tasks_ready",
             "plan": plan
         })
         return jsonify(plan)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/repurpose-video/<video_id>")
-def api_repurpose_video(video_id):
+@app.route("/api/shorts/task/<video_id>")
+def api_shorts_task(video_id):
     try:
         rows = yt.videos_by_ids([video_id])
         if not rows:
             return jsonify({"error": "video not found"}), 404
-        plan = RepurposeAgent().repurpose_video(rows[0])
+        task = ShortWorkflowAgent().make_short_task(rows[0])
         queue.add({
             "created_at": datetime.datetime.utcnow().isoformat() + "Z",
-            "type": "repurpose_single_video",
-            "status": "plan_ready",
-            "plan": plan
+            "type": "single_short_task",
+            "status": "task_ready",
+            "task": task
         })
-        return jsonify(plan)
+        return jsonify(task)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+@app.route("/api/shorts/upload-from-url", methods=["POST"])
+def api_shorts_upload_from_url():
+    """
+    Pass-through convenience endpoint.
+    It uploads a ready vertical Short MP4 URL using /api/upload/from-url logic expectations.
+    The caller must provide a direct MP4 URL for a legally owned/generated Short.
+    """
+    from upload_routes import _safe_upload_allowed, _download_mp4
+    from youtube_uploader import upload_video
+
+    data = request.get_json(silent=True) or {}
+    allowed, reason = _safe_upload_allowed()
+    if not allowed:
+        return jsonify({"status": "blocked", "reason": reason}), 400
+
+    if data.get("own_content_confirmed") is not True:
+        return jsonify({"status": "blocked", "reason": "own_content_confirmed must be true."}), 400
+
+    url = data.get("short_mp4_url") or data.get("video_url")
+    if not url:
+        return jsonify({"status": "blocked", "reason": "Missing short_mp4_url."}), 400
+
+    path = None
+    try:
+        path = _download_mp4(url)
+        title = data.get("title", "BANG IT UP MUSIC Short #Shorts")
+        if "#shorts" not in title.lower():
+            title = title[:90] + " #Shorts"
+        description = data.get("description", "BANG IT UP MUSIC Short. #Shorts #BANGITUPMUSIC")
+        tags = data.get("tags", ["BANGITUPMUSIC", "Shorts", "TechHouse", "EDM"])
+        result = upload_video(
+            video_file=path,
+            title=title,
+            description=description,
+            tags=tags,
+            category_id=data.get("category_id", "10"),
+            privacy_status=data.get("privacy_status", os.getenv("DEFAULT_UPLOAD_PRIVACY", "private")),
+            publish_at=data.get("publish_at"),
+        )
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({"status": "short_upload_failed", "error": str(e)}), 500
+    finally:
+        if path and os.path.exists(path):
+            try:
+                os.remove(path)
+            except Exception:
+                pass
 
 @app.route("/api/seo")
 def api_seo():
@@ -117,25 +166,17 @@ def api_distribution():
 def api_calendar():
     return jsonify(CalendarAgent().weekly())
 
-@app.route("/api/create-video-project")
-def api_create_video_project():
-    title = request.args.get("title", "BANG IT UP MUSIC Upload")
-    genre = request.args.get("genre", "Tech House")
-    project = VideoCreatorAgent().create_project(title, genre)
-    queue.add({"type": "ready_mp4_project", "status": "needs_mp4_url", "project": project})
-    return jsonify(project)
-
 @app.route("/api/auto-run")
 def api_auto_run():
     try:
         videos = yt.recent_videos(10)
-        repurpose_plan = RepurposeAgent().repurpose_batch(videos)
+        plan = ShortWorkflowAgent().batch(videos)
         item = {
             "created_at": datetime.datetime.utcnow().isoformat() + "Z",
-            "type": "auto_run_repurpose",
-            "status": "plan_ready",
-            "plan": repurpose_plan,
-            "note": "Repurpose plans are ready. To produce actual Shorts videos, provide original MP4/direct URLs."
+            "type": "auto_run_shorts_workflow",
+            "status": "tasks_ready",
+            "plan": plan,
+            "note": "Tasks are ready. Provide original/cut Short MP4 direct URLs to upload real Shorts."
         }
         queue.add(item)
         return jsonify({"status": "completed", "created_items": [item]})
@@ -149,10 +190,10 @@ def api_queue():
 @app.route("/dashboard")
 def dashboard():
     return render_template_string("""
-    <h1>BANG IT UP MUSIC AI Agents v13</h1>
-    <p>Repurpose existing YouTube videos into Shorts plans, captions, SEO refreshes and upload tasks.</p>
+    <h1>BANG IT UP MUSIC AI Agents v14</h1>
+    <p>Auto Shorts workflow from existing YouTube videos. Uses original/cut MP4 direct URLs for real uploads.</p>
     <button onclick="go('/api/upload/status')">Upload Status</button>
-    <button onclick="go('/api/repurpose-existing?max=10')">Repurpose Existing Videos</button>
+    <button onclick="go('/api/shorts/tasks?max=10')">Create Shorts Tasks</button>
     <button onclick="go('/api/auto-run')">Auto Run</button>
     <button onclick="go('/api/report')">Report</button>
     <pre id="o">Ready</pre>

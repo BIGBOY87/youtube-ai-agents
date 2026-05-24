@@ -10,6 +10,18 @@ def _int(v):
     except Exception:
         return 0
 
+def _genre_from_text(text):
+    t = (text or "").lower()
+    if "melodic" in t:
+        return "Melodic Techno"
+    if "future house" in t:
+        return "Future House"
+    if "edm" in t:
+        return "EDM"
+    if "techno" in t:
+        return "Techno"
+    return "Tech House"
+
 class SEOAgent:
     def generate(self, title, genre, mood="high energy"):
         clean = title.strip() or "New BANG IT UP MUSIC Track"
@@ -19,7 +31,7 @@ class SEOAgent:
                 f"{clean} | Night Drive {genre}",
                 f"{clean} | BANG IT UP MUSIC"
             ],
-            "description": f"{clean} by BANG IT UP MUSIC. {genre} energy, dark atmosphere, heavy bass and underground club mood.",
+            "description": f"{clean} by BANG IT UP MUSIC. {genre} energy, dark atmosphere, heavy bass and underground club mood. Subscribe for weekly underground releases.",
             "hashtags": ["#BANGITUPMUSIC", "#TechHouse", "#EDM", "#MelodicTechno", "#NightDrive"],
             "keywords": [genre, "dark techno", "tech house 2026", "underground music"]
         }
@@ -41,10 +53,60 @@ class ShortsAgent:
                     "caption": f"{h} — {title} #BANGITUPMUSIC #{genre.replace(' ', '')}",
                     "duration": "12-22s",
                     "format": "9:16 vertical",
-                    "cta": "Subscribe for weekly underground energy"
+                    "cta": "Subscribe for weekly underground energy",
+                    "suggested_cut": "Use the strongest drop or most energetic 15-25 second section."
                 }
                 for h in hooks
             ]
+        }
+
+class ShortWorkflowAgent:
+    def make_short_task(self, video):
+        s = video.get("snippet", {})
+        st = video.get("statistics", {})
+        title = s.get("title", "Untitled")
+        desc = s.get("description", "")
+        video_id = video.get("id")
+        genre = _genre_from_text(title + " " + desc)
+        views = _int(st.get("viewCount"))
+        likes = _int(st.get("likeCount"))
+        comments = _int(st.get("commentCount"))
+        seo = SEOAgent().generate(title, genre)
+        shorts = ShortsAgent().generate(title, genre)
+
+        priority = "high" if views < 100 else "medium" if views < 1000 else "scale"
+        return {
+            "task_id": str(uuid.uuid4())[:8],
+            "source_video": {
+                "video_id": video_id,
+                "youtube_url": f"https://www.youtube.com/watch?v={video_id}",
+                "title": title,
+                "views": views,
+                "likes": likes,
+                "comments": comments
+            },
+            "priority": priority,
+            "required_input": "original MP4 direct URL for this source video",
+            "cannot_do": "YouTube API does not provide the uploaded MP4 file. Provide your original MP4/direct URL.",
+            "short_upload_template": {
+                "title": seo["titles"][1] + " #Shorts",
+                "description": seo["description"] + "\\n\\n#Shorts #BANGITUPMUSIC",
+                "tags": [x.replace("#", "") for x in seo["hashtags"]] + ["Shorts"],
+                "category_id": "10",
+                "privacy_status": "private",
+                "own_content_confirmed": True
+            },
+            "shorts_package": shorts,
+            "action": "Use /api/shorts/upload-from-url with a direct MP4 URL of the already-cut vertical Short."
+        }
+
+    def batch(self, videos):
+        tasks = [self.make_short_task(v) for v in videos]
+        tasks.sort(key=lambda x: x["source_video"]["views"])
+        return {
+            "status": "short_tasks_created",
+            "count": len(tasks),
+            "items": tasks
         }
 
 class DistributionAgent:
@@ -62,17 +124,12 @@ class GrowthAgent:
             s = v.get("snippet", {})
             st = v.get("statistics", {})
             views = _int(st.get("viewCount"))
-            likes = _int(st.get("likeCount"))
-            comments = _int(st.get("commentCount"))
-            priority = "high" if views < 100 else "medium" if views < 1000 else "scale"
             recs.append({
                 "video_id": v.get("id"),
                 "title": s.get("title"),
                 "views": views,
-                "likes": likes,
-                "comments": comments,
-                "priority": priority,
-                "recommendation": "Create Shorts package and stronger title/thumbnail test."
+                "priority": "high" if views < 100 else "medium" if views < 1000 else "scale",
+                "recommendation": "Create Short task and upload private test Short."
             })
         return {
             "summary": {
@@ -84,77 +141,13 @@ class GrowthAgent:
             "recommendations": recs
         }
 
-class RepurposeAgent:
-    def repurpose_video(self, video):
-        s = video.get("snippet", {})
-        st = video.get("statistics", {})
-        title = s.get("title", "Untitled")
-        description = s.get("description", "")
-        video_id = video.get("id")
-        views = _int(st.get("viewCount"))
-        likes = _int(st.get("likeCount"))
-        comments = _int(st.get("commentCount"))
-
-        genre = "Tech House"
-        if "melodic" in (title + description).lower():
-            genre = "Melodic Techno"
-        if "edm" in (title + description).lower():
-            genre = "EDM"
-
-        shorts = ShortsAgent().generate(title, genre)
-        seo = SEOAgent().generate(title, genre)
-        distribution = DistributionAgent().posts(title, genre)
-
-        if views < 100:
-            action = "Repurpose immediately into Shorts. Low reach means the idea needs new entry points."
-        elif views < 1000:
-            action = "Create 2 Shorts and test one title variant."
-        else:
-            action = "Scale. Create multiple Shorts from this format."
-
-        return {
-            "source_video": {
-                "video_id": video_id,
-                "youtube_url": f"https://www.youtube.com/watch?v={video_id}",
-                "title": title,
-                "views": views,
-                "likes": likes,
-                "comments": comments
-            },
-            "priority_action": action,
-            "shorts_package": shorts,
-            "seo_refresh": seo,
-            "distribution_posts": distribution,
-            "production_note": "To create the actual Short video, provide the original MP4/direct URL. YouTube API metadata alone cannot cut the existing YouTube video file."
-        }
-
-    def repurpose_batch(self, videos):
-        rows = [self.repurpose_video(v) for v in videos]
-        rows.sort(key=lambda x: x["source_video"]["views"])
-        return {
-            "status": "repurpose_plan_created",
-            "count": len(rows),
-            "items": rows
-        }
-
 class CalendarAgent:
     def weekly(self):
-        return [{"day": "Friday", "task": "Publish/schedule at 19:00"}]
+        return [{"day": "Friday", "task": "Publish/schedule Shorts around 19:00"}]
 
 class InitiativeEngine:
     def decide(self, channel, videos):
-        return [{"priority": "high", "action": "Run /api/repurpose-existing and create Shorts packages from lowest-view videos."}]
-
-class VideoCreatorAgent:
-    def create_project(self, title, genre):
-        seo = SEOAgent().generate(title, genre)
-        return {
-            "id": str(uuid.uuid4())[:8],
-            "title": seo["titles"][0],
-            "genre": genre,
-            "seo": seo,
-            "required_input": "direct MP4 URL"
-        }
+        return [{"priority": "high", "action": "Run /api/shorts/tasks and create Shorts from low-view existing videos."}]
 
 class ApprovalQueue:
     def __init__(self, path="approval_queue.json"):

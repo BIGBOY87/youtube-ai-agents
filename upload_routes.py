@@ -24,7 +24,7 @@ def _download_mp4(url):
     fd, path = tempfile.mkstemp(suffix=".mp4")
     os.close(fd)
     size = 0
-    with requests.get(url, stream=True, timeout=60) as r:
+    with requests.get(url, stream=True, timeout=90) as r:
         r.raise_for_status()
         ctype = r.headers.get("content-type", "").lower()
         if "text/html" in ctype:
@@ -44,14 +44,14 @@ def register_upload_routes(app):
     def upload_status():
         return jsonify({
             "upload_routes": "active",
-            "mode": "upload-ready-mp4-only",
+            "mode": "upload-ready-mp4-only-with-shorts-workflow",
             "youtube_upload_enabled": os.getenv("YOUTUBE_UPLOAD_ENABLED", "false").lower() == "true",
             "auto_public_mode": os.getenv("AUTO_PUBLIC_MODE", "false").lower() == "true",
             "auto_approve_uploads": os.getenv("AUTO_APPROVE_UPLOADS", "false").lower() == "true",
             "has_token_env": bool(os.getenv("YOUTUBE_TOKEN_JSON", "").strip()),
             "has_local_token_file": os.path.exists("token.json"),
             "max_upload_source_mb": MAX_MB,
-            "message": "Uploads existing MP4 files from direct URLs. Repurpose Agent generates Shorts plans from existing YouTube videos."
+            "message": "Uploads existing MP4 files from direct URLs. Shorts workflow creates plans from YouTube metadata and uploads ready Short MP4 URLs."
         })
 
     @app.route("/api/upload/from-url", methods=["POST"])
