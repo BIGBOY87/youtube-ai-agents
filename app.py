@@ -1,10 +1,14 @@
 import os, json, datetime, random
 from flask import Flask, jsonify, request, render_template_string, redirect
 from youtube_client import YoutubeClient
+from flask_upload_routes_patch import register_upload_routes
 from bangitup_agents import GrowthAgent, SEOAgent, ShortsAgent, DistributionAgent, CalendarAgent, InitiativeEngine, VideoCreatorAgent, ApprovalQueue, TrendHunter, ThumbnailAgent, SchedulerAgent, SafetyReviewer
 
 app = Flask(__name__)
-yt = YoutubeClient()
+
+register_upload_routes(app)
+
+yt = YouTubeClient()
 queue = ApprovalQueue()
 
 def missing_vars():
