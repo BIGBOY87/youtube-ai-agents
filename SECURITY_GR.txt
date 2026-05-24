@@ -1,0 +1,19 @@
+ΑΣΦΑΛΕΙΑ
+
+Πριν βάλεις AUTO_APPROVE_UPLOADS=true, δοκίμασε πάντα με:
+privacy_status = private
+
+Μόνο όταν όλα δουλεύουν:
+- βίντεο δικό σου
+- τίτλοι σωστοί
+- περιγραφές σωστές
+- όχι copyright
+- όχι spam
+
+τότε μπορείς να βάλεις:
+AUTO_APPROVE_UPLOADS=true
+
+Προτεινόμενο όριο:
+PUBLIC_PUBLISH_LIMIT_PER_DAY=1
+
+Το σύστημα δεν είναι για fake engagement. Είναι για νόμιμη παραγωγή/δημοσίευση περιεχομένου.

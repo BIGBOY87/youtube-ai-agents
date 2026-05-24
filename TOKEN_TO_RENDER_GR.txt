@@ -1,0 +1,29 @@
+ΠΩΣ ΒΑΖΕΙΣ ΤΟ TOKEN ΣΤΟ RENDER ΜΕ ΑΣΦΑΛΕΙΑ
+
+Αφού τρέξεις τοπικά:
+python connect_upload_oauth.py
+
+θα δημιουργηθεί:
+token.json
+
+ΜΗΝ το ανεβάσεις στο GitHub.
+
+Άνοιξε το token.json με Notepad.
+Αντέγραψε ΟΛΟ το JSON.
+
+Render → Environment → Add Environment Variable
+
+Key:
+YOUTUBE_TOKEN_JSON
+
+Value:
+[επικόλλησε όλο το περιεχόμενο του token.json]
+
+Μετά:
+Save Changes → Manual Deploy → Deploy latest commit
+
+Τεστ:
+https://youtube-ai-agents.onrender.com/api/upload/status
+
+Πρέπει να δείχνει:
+"has_token_env": true
