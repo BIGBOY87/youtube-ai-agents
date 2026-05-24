@@ -1,24 +1,23 @@
-# BANG IT UP MUSIC AI Agents v2
+# BANG IT UP MUSIC AI Agents v3 FULL
 
-Render-ready YouTube growth agent system.
+Render-ready YouTube AI dashboard.
 
-Endpoints:
-- `/health`
-- `/dashboard`
-- `/api/channel`
-- `/api/videos`
-- `/api/report`
-- `/api/seo?title=...&genre=...`
-- `/api/shorts?title=...&genre=...`
-- `/api/calendar`
-- `/api/competitors`
+Required environment variables:
+- YOUTUBE_API_KEY
+- YOUTUBE_CHANNEL_ID
 
-Required Render Environment Variables:
-- `YOUTUBE_API_KEY`
-- `YOUTUBE_CHANNEL_ID`
+Optional:
+- COMPETITOR_CHANNEL_IDS comma-separated channel IDs
+- OPENAI_API_KEY / GEMINI_API_KEY for future LLM enhancement
 
-Render:
-Build Command: `pip install -r requirements.txt`
-Start Command: `gunicorn app:app`
-
-This system does not create fake views, fake subscribers, spam comments, or bot engagement.
+Routes:
+- /dashboard
+- /health
+- /api/channel
+- /api/videos
+- /api/report
+- /api/seo
+- /api/shorts
+- /api/distribution
+- /api/calendar
+- /api/competitors
