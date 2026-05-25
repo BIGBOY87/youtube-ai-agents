@@ -3,7 +3,7 @@ import os, json
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
-SCOPES=["https://www.googleapis.com/auth/youtube.upload","https://www.googleapis.com/auth/youtube.force-ssl","https://www.googleapis.com/auth/youtube.readonly","https://www.googleapis.com/auth/yt-analytics.readonly","https://www.googleapis.com/auth/drive.readonly"]
+SCOPES=["https://www.googleapis.com/auth/youtube.upload","https://www.googleapis.com/auth/youtube.force-ssl","https://www.googleapis.com/auth/youtube.readonly","https://www.googleapis.com/auth/yt-analytics.readonly","https://www.googleapis.com/auth/drive.file"]
 def _credentials():
     raw=os.getenv("YOUTUBE_TOKEN_JSON","").strip()
     if raw: return Credentials.from_authorized_user_info(json.loads(raw),SCOPES)

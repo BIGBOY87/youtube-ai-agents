@@ -8,7 +8,7 @@ SCOPES=[
  "https://www.googleapis.com/auth/youtube.force-ssl",
  "https://www.googleapis.com/auth/youtube.readonly",
  "https://www.googleapis.com/auth/yt-analytics.readonly",
- "https://www.googleapis.com/auth/drive.readonly",
+ "https://www.googleapis.com/auth/drive.file",
 ]
 
 def _credentials():
@@ -17,7 +17,7 @@ def _credentials():
         return Credentials.from_authorized_user_info(json.loads(raw), SCOPES)
     if os.path.exists("token.json"):
         return Credentials.from_authorized_user_file("token.json", SCOPES)
-    raise RuntimeError("Missing OAuth token with drive.readonly scope.")
+    raise RuntimeError("Missing OAuth token with drive.file scope.")
 
 def _drive():
     return build("drive","v3",credentials=_credentials())

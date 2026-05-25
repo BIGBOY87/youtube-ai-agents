@@ -25,7 +25,7 @@ def _download_mp4(url):
 def register_upload_routes(app):
     @app.route("/api/upload/status")
     def upload_status():
-        return jsonify({"upload_routes":"active","mode":"v19-drive-scanner","youtube_upload_enabled":os.getenv("YOUTUBE_UPLOAD_ENABLED","false").lower()=="true","auto_public_mode":os.getenv("AUTO_PUBLIC_MODE","false").lower()=="true","auto_approve_uploads":os.getenv("AUTO_APPROVE_UPLOADS","false").lower()=="true","has_token_env":bool(os.getenv("YOUTUBE_TOKEN_JSON","").strip()),"max_upload_source_mb":MAX_MB})
+        return jsonify({"upload_routes":"active","mode":"v20-clean-drive-file","youtube_upload_enabled":os.getenv("YOUTUBE_UPLOAD_ENABLED","false").lower()=="true","auto_public_mode":os.getenv("AUTO_PUBLIC_MODE","false").lower()=="true","auto_approve_uploads":os.getenv("AUTO_APPROVE_UPLOADS","false").lower()=="true","has_token_env":bool(os.getenv("YOUTUBE_TOKEN_JSON","").strip()),"max_upload_source_mb":MAX_MB})
     @app.route("/api/source/upload-private",methods=["POST"])
     def source_upload_private():
         data=request.get_json(silent=True) or {}

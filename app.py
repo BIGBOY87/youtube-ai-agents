@@ -16,7 +16,7 @@ register_upload_routes(app)
 def root(): return redirect("/dashboard")
 
 @app.route("/health")
-def health(): return jsonify({"status":"ok","service":"youtube-ai-agents-v19-drive-scanner","started_at":datetime.datetime.utcnow().isoformat()+"Z"})
+def health(): return jsonify({"status":"ok","service":"youtube-ai-agents-v20-clean-drive-file","started_at":datetime.datetime.utcnow().isoformat()+"Z"})
 
 @app.route("/api/drive/status")
 def api_drive_status():
@@ -24,7 +24,7 @@ def api_drive_status():
         items=list_source_videos(max_results=int(request.args.get("max","50")))
         return jsonify({"status":"ok","drive_scanner":"active","files_found":len(items),"items":items})
     except Exception as e:
-        return jsonify({"status":"drive_error","error":str(e),"note":"Check DRIVE_SOURCE_FOLDER_ID and YOUTUBE_TOKEN_JSON drive.readonly scope."}),500
+        return jsonify({"status":"drive_error","error":str(e),"note":"Check DRIVE_SOURCE_FOLDER_ID and YOUTUBE_TOKEN_JSON drive.file scope."}),500
 
 @app.route("/api/drive/scan")
 def api_drive_scan():
@@ -85,7 +85,7 @@ def api_queue(): return jsonify(queue.list())
 
 @app.route("/dashboard")
 def dashboard():
-    return render_template_string("""<h1>BANG IT UP MUSIC AI Agents v19</h1><p>Drive Scanner + Source Registry + Growth Loop.</p><button onclick="go('/api/upload/status')">Upload Status</button><button onclick="go('/api/drive/status')">Drive Status</button><button onclick="go('/api/drive/scan')">Drive Scan</button><button onclick="go('/api/source/registry')">Source Registry</button><button onclick="go('/api/source/growth-loop')">Growth Loop</button><button onclick="go('/api/approval-queue')">Queue</button><pre id=o>Ready</pre><script>async function go(p){o.textContent='Loading';let r=await fetch(p);o.textContent=JSON.stringify(await r.json(),null,2)}</script>""")
+    return render_template_string("""<h1>BANG IT UP MUSIC AI Agents v20 CLEAN</h1><p>Drive Scanner + Source Registry + Growth Loop.</p><button onclick="go('/api/upload/status')">Upload Status</button><button onclick="go('/api/drive/status')">Drive Status</button><button onclick="go('/api/drive/scan')">Drive Scan</button><button onclick="go('/api/source/registry')">Source Registry</button><button onclick="go('/api/source/growth-loop')">Growth Loop</button><button onclick="go('/api/approval-queue')">Queue</button><pre id=o>Ready</pre><script>async function go(p){o.textContent='Loading';let r=await fetch(p);o.textContent=JSON.stringify(await r.json(),null,2)}</script>""")
 
 if __name__=="__main__":
     app.run(host="0.0.0.0",port=10000)
