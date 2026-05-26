@@ -1,0 +1,13 @@
+{
+  "name": "render-optimized-deployment",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "start": "NODE_ENV=production node server.js",
+    "build": "echo 'Add your frontend building commands here if applicable'"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  }
+}
