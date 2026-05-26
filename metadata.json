@@ -1,0 +1,6 @@
+{
+  "name": "YouTube AI Agent Manager",
+  "description": "An autonomous multi-agent dashboard for automatic YouTube channel analysis, Shorts content generation, SEO title optimization, and community auto-replies.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
