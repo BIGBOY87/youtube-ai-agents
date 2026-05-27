@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Automation Dashboard</title>
+    <style>
+        :root {
+            --bg-base: #0b0f19;
+            --bg-surface: #131a26;
+            --bg-element: #1c2638;
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --accent: #3b82f6;
+            --accent-success: #10b981;
+            --accent-error: #ef4444;
+            --border: #26354a;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            background-color: var(--bg-base);
+            color: var(--text-main);
+            padding: 2rem;
+            display: flex;
+            justify-content: center;
+        }
+
+        .dashboard-container {
+            width: 100%;
+            max-width: 1200px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 2rem;
+        }
+
+        @media (max-width: 900px) {
+            .dashboard-container {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        h1, h2 {
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+            letter-spacing: -0.025em;
+        }
+
+        h1 {
+            grid-column: 1 / -1;
+            font-size: 2rem;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 1rem;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        h1::before {
+            content: '';
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            background-color: var(--accent-success);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--accent-success);
+        }
+
+        .panel {
+            background-color: var(--bg-surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 2rem;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.2);
+        }
+
+        .form-group {
+            margin-bottom: 1.25rem;
+        }
+
+        label {
+            display: block;
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+        }
+
+        input[type="text"], textarea, select {
+            width: 100%;
+            background-color: var(--bg-element);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.75rem;
+            color: var(--text-main);
+            font-size: 0.95rem;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
+        input[type="file"] {
+            display: none;
+        }
+
+        .custom-file-upload {
+            display: block;
+            width: 100%;
+            padding: 1.5rem;
+            background-color: var(--bg-element);
+            border: 2px dashed var(--border);
+            border-radius: 8px;
+            text-align: center;
+            cursor: pointer;
+            color: var(--text-muted);
+            transition: all 0.2s;
+        }
+
+        .custom-file-upload:hover {
+            border-color: var(--accent);
+            color: #fff;
+        }
+
+        .btn {
+            display: inline-flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            padding: 0.85rem;
+            background-color: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 6px;
+            font-size: 1rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .btn:hover {
+            background-color: #2563eb;
+        }
+
+        .actions-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .btn-secondary {
+            background-color: var(--bg-element);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 0.75rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--border);
+            border-color: var(--text-muted);
+        }
+
+        .status-container {
+            margin-top: 1.5rem;
+            background-color: var(--bg-element);
+            border-radius: 8px;
+            padding: 1.25rem;
+            border: 1px solid var(--border);
+        }
+
+        .status-step {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            margin-bottom: 0.75rem;
+            font-size: 0.9rem;
+            color: var(--text-muted);
+        }
+
+        .status-step:last-child {
+            margin-bottom: 0;
+        }
+
+        .status-step.active {
+            color: var(--accent);
+            font-weight: 500;
+        }
+
+        .status-step.completed {
+            color: var(--accent-success);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--border);
+            border-radius: 50%;
+        }
+
+        .status-step.active .status-dot {
+            background-color: var(--accent);
+            box-shadow: 0 0 8px var(--accent);
+        }
+
+        .status-step.completed .status-dot {
+            background-color: var(--accent-success);
+        }
+
+        .output-box {
+            background-color: #05070b;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 1rem;
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: var(--accent-success);
+            max-height: 200px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+
+        a.studio-btn {
+            display: inline-block;
+            margin-top: 0.5rem;
+            color: #fff;
+            background-color: #cc181e;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            text-decoration: none;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        a.studio-btn:hover {
+            background-color: #b01318;
+        }
+    </style>
+</head>
+<body>
+
+<div class="dashboard-container">
+    <h1>System Operator Dashboard</h1>
+
+    <!-- Left Panel: Manual Media Upload Form -->
+    <div class="panel">
+        <h2>Manual Video Ingestion</h2>
+        <form id="manualUploadForm">
+            <div class="form-group">
+                <label>Video File (.mp4)</label>
+                <label for="video_file" class="custom-file-upload" id="file_label">
+                    Επιλέξτε αρχείο βίντεο MP4
+                </label>
+                <input type="file" id="video_file" name="video_file" accept=".mp4" required>
+            </div>
+
+            <div class="form-group">
+                <label>Video Title</label>
+                <input type="text" name="title" placeholder="Εισάγετε τίτλο..." required>
+            </div>
+
+            <div class="form-group">
+                <label>Description</label>
+                <textarea name="description" rows="3" placeholder="Εισάγετε περιγραφή..."></textarea>
+            </div>
+
+            <div class="form-group">
+                <label>Tags (Χωρισμένα με κόμμα)</label>
+                <input type="text" name="tags" placeholder="automation, AI, API">
+            </div>
+
+            <div class="form-group">
+                <label>Privacy Status</label>
+                <select name="privacy">
+                    <option value="private">Private</option>
+                    <option value="unlisted" selected>Unlisted</option>
+                    <option value="public">Public</option>
+                </select>
+            </div>
+
+            <button type="submit" class="btn" id="uploadBtn">Execute Video Deployment</button>
+        </form>
+
+        <!-- Live Stepper Status Area -->
+        <div class="status-container" id="stepperContainer" style="display: none;">
+            <div class="status-step" id="step_selected"><div class="status-dot"></div> File Selected</div>
+            <div class="status-step" id="step_uploading"><div class="status-dot"></div> Uploading to Backend Container</div>
+            <div class="status-step" id="step_token"><div class="status-dot"></div> Access Token Refreshed</div>
+            <div class="status-step" id="step_youtube"><div class="status-dot"></div> YouTube Upload Started</div>
+            <div class="status-step" id="step_completed"><div class="status-dot"></div> Upload Completed</div>
+            <div id="successDetails" style="margin-top: 1rem; display: none;"></div>
+        </div>
+    </div>
+
+    <!-- Right Panel: Asynchronous Action Triggers -->
+    <div class="panel" style="display: flex; flex-direction: column;">
+        <h2>System Orchestration Core</h2>
+        <div class="actions-grid">
+            <button class="btn-secondary" onclick="triggerAPI('/api/upload/status')">Upload Status</button>
+            <button class="btn-secondary" onclick="triggerAPI('/api/drive/status')">Drive Status</button>
+            <button class="btn-secondary" onclick="triggerAPI('/api/drive/scan')">Drive Scan</button>
+            <button class="btn-secondary" onclick="triggerAPI('/api/source/registry')">Source Registry</button>
+            <button class="btn-secondary" onclick="triggerAPI('/api/source/growth-loop')">Growth Loop</button>
+            <button class="btn-secondary" onclick="triggerAPI('/api/queue')">Queue</button>
+        </div>
+
+        <h2 style="font-size: 1.1rem; margin-bottom: 0.75rem; color: var(--text-muted);">Console Output Log</h2>
+        <div class="output-box" id="consoleOutput" style="flex-grow: 1; min-height: 250px;">Ready for operational tracking...</div>
+    </div>
+</div>
+
+<script>
+    // File label monitoring
+    const fileInput = document.getElementById('video_file');
+    const fileLabel = document.getElementById('file_label');
+    
+    fileInput.addEventListener('change', (e) => {
+        if(e.target.files.length > 0) {
+            fileLabel.textContent = `Selected: ${e.target.files[0].name}`;
+            fileLabel.style.borderColor = 'var(--accent-success)';
+            fileLabel.style.color = '#fff';
+            
+            // Trigger automatic step state visual confirmation
+            document.getElementById('stepperContainer').style.display = 'block';
+            document.getElementById('step_selected').classList.add('completed');
+        }
+    });
+
+    // Multipart Upload Handler via Fetch API
+    document.getElementById('manualUploadForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const formData = new FormData(e.target);
+        const submitBtn = document.getElementById('uploadBtn');
+        const stepper = document.getElementById('stepperContainer');
+        const details = document.getElementById('successDetails');
+        
+        stepper.style.display = 'block';
+        details.style.display = 'none';
+        
+        // Reset steppers
+        document.querySelectorAll('.status-step').forEach(el => {
+            if(el.id !== 'step_selected') el.className = 'status-step';
+        });
+        
+        const stepUploading = document.getElementById('step_uploading');
+        stepUploading.classList.add('active');
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Uploading Data Matrix...";
+
+        try {
+            // Live simulation of underlying background OAuth status flows during standard processing block
+            setTimeout(() => {
+                stepUploading.className = 'status-step completed';
+                document.getElementById('step_token').classList.add('completed');
+                document.getElementById('step_youtube').classList.add('active');
+            }, 600);
+
+            const response = await fetch('/api/upload/manual', {
+                method: 'POST',
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if(result.success) {
+                document.getElementById('step_youtube').className = 'status-step completed';
+                document.getElementById('step_completed').classList.add('completed');
+                
+                details.innerHTML = `
+                    <p style="color: var(--accent-success); font-size:0.9rem; margin-bottom:0.5rem;">✔ Deployment Pipeline Synced.</p>
+                    <p style="font-size:0.85rem; color: var(--text-muted);"><strong>Video ID:</strong> ${result.video_id}</p>
+                    <a href="${result.studio_link}" target="_blank" class="studio-btn">YouTube Studio Link</a>
+                `;
+                details.style.display = 'block';
+                document.getElementById('consoleOutput').textContent = JSON.stringify(result, null, 2);
+            } else {
+                throw new Error(result.error || "Execution dropped by operational system.");
+            }
+
+        } catch (error) {
+            document.querySelectorAll('.status-step.active').forEach(el => el.className = 'status-step');
+            document.getElementById('consoleOutput').textContent = `CRITICAL EXCEPTION INDUCTION:\n${error.message}`;
+        } finally {
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Execute Video Deployment";
+        }
+    });
+
+    // Asynchronous Endpoint Triggering Architecture
+    async function triggerAPI(endpoint) {
+        const consoleBox = document.getElementById('consoleOutput');
+        consoleBox.textContent = `Polling system endpoint structure [${endpoint}]...`;
+        try {
+            const response = await fetch(endpoint);
+            const data = await response.json();
+            consoleBox.textContent = `[HTTP Client Frame Response ${response.status}]\n` + JSON.stringify(data, null, 2);
+        } catch (error) {
+            consoleBox.textContent = `Execution fault on [${endpoint}]:\n${error.message}`;
+        }
+    }
+</script>
+
+</body>
+</html>

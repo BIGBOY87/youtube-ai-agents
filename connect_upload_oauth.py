@@ -11,7 +11,7 @@ SCOPES = [
 
 if __name__ == "__main__":
     if not os.path.exists("client_secret.json"):
-        raise SystemExit("Missing client_secret.json")
+        raise SystemExit("Missing client_secret.json. Put your Google OAuth Desktop JSON here and rename it client_secret.json")
 
     if os.path.exists("token.json"):
         os.remove("token.json")
